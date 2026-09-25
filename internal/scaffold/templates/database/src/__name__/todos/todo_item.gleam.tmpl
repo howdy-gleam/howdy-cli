@@ -1,0 +1,69 @@
+//// The todo record: types, validation, JSON codecs and the Gloo table.
+//// (`todo` is a Gleam keyword, hence `todo_item` and `item`.)
+
+import gleam/dynamic/decode
+import gleam/json
+import gloo/schema
+import howdy/validate
+
+pub type Todo {
+  Todo(id: Int, title: String, done: Bool)
+}
+
+/// Raw input from a request or form, before validation.
+pub type TodoInput {
+  TodoInput(title: String)
+}
+
+/// Only `validate` can produce one, so services can trust it.
+pub opaque type NewTodo {
+  NewTodo(title: String)
+}
+
+pub fn validate(input: TodoInput) -> validate.Result(NewTodo) {
+  use title <- validate.field("title", input.title, [
+    validate.trim(),
+    validate.not_empty(),
+    validate.max_length(120),
+  ])
+  validate.ok(NewTodo(title:))
+}
+
+pub fn title(input: NewTodo) -> String {
+  input.title
+}
+
+pub fn input_decoder() -> decode.Decoder(TodoInput) {
+  use title <- decode.field("title", decode.string)
+  decode.success(TodoInput(title:))
+}
+
+pub fn done_decoder() -> decode.Decoder(Bool) {
+  decode.field("done", decode.bool, decode.success)
+}
+
+pub fn decoder() -> decode.Decoder(Todo) {
+  use id <- decode.field("id", decode.int)
+  use title <- decode.field("title", decode.string)
+  use done <- decode.field("done", decode.bool)
+  decode.success(Todo(id:, title:, done:))
+}
+
+/// SQLite has no boolean type; `done` is stored as 0 or 1.
+pub fn table() -> schema.Table(Todo) {
+  let decoder = {
+    use id <- decode.field(0, decode.int)
+    use title <- decode.field(1, decode.string)
+    use done <- decode.field(2, decode.int)
+    decode.success(Todo(id:, title:, done: done != 0))
+  }
+  schema.Table(name: "todos", primary_key: "id", decoder:)
+}
+
+pub fn to_json(item: Todo) -> json.Json {
+  json.object([
+    #("id", json.int(item.id)),
+    #("title", json.string(item.title)),
+    #("done", json.bool(item.done)),
+  ])
+}

@@ -1,0 +1,22 @@
+//// Version {{.Version}}: the {{.Plural}} table.
+
+import gloo/migration.{type Migration}
+import gloo/{{if .Postgres}}pg{{else}}sqlite{{end}}
+
+pub fn migration() -> Migration {
+  migration.create_table(
+    version: {{.Version}},
+    name: "{{.MigrationModule}}",
+    table: "{{.Plural}}",
+    columns: [
+{{- if .Postgres}}
+      pg.column("id", pg.BigSerial) |> pg.primary_key,
+{{- else}}
+      sqlite.column("id", sqlite.Integer) |> sqlite.primary_key,
+{{- end}}
+{{- range .Fields}}
+      {{.Column}},
+{{- end}}
+    ],
+  )
+}

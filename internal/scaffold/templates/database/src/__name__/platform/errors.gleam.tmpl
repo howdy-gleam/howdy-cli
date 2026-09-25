@@ -1,0 +1,14 @@
+//// The one place database errors become application errors, so responses
+//// never leak SQL details.
+
+import gloo/error
+import howdy/service
+
+pub fn from_db(error: error.GlooError) -> service.Error {
+  case error {
+    error.NoResultError -> service.NotFound("Record not found")
+    error.ConstraintError(_) ->
+      service.Conflict("The record conflicts with existing data")
+    other -> service.Internal(error.to_string(other))
+  }
+}

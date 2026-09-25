@@ -1,0 +1,45 @@
+//// The JSON API for todos. Try it:
+////
+//// ```sh
+//// curl http://127.0.0.1:8787/api/todos
+//// curl -X POST http://127.0.0.1:8787/api/todos -d '{"title":"Read the Howdy README"}'
+//// curl -X PATCH http://127.0.0.1:8787/api/todos/1 -d '{"done":true}'
+//// curl -X DELETE http://127.0.0.1:8787/api/todos/1
+//// ```
+
+import gleam/json
+import gloo/repo.{type Repo}
+import howdy/body
+import howdy/controller
+import howdy/param
+import howdy/service
+import {{.Name}}/todos/todo_item
+import {{.Name}}/todos/todos
+
+pub fn controller(db: Repo) {
+  controller.new("api/todos")
+  |> controller.get("/", fn(ctx) {
+    todos.all(db) |> service.respond(ctx, json.array(_, todo_item.to_json))
+  })
+  |> controller.get("/:id", fn(ctx) {
+    use id <- param.int(ctx, "id")
+    todos.find(db, id) |> service.respond(ctx, todo_item.to_json)
+  })
+  |> controller.post("/", fn(ctx) {
+    use input <- body.validated(
+      ctx,
+      todo_item.input_decoder(),
+      todo_item.validate,
+    )
+    todos.create(db, input) |> service.created(ctx, todo_item.to_json)
+  })
+  |> controller.patch("/:id", fn(ctx) {
+    use id <- param.int(ctx, "id")
+    use done <- body.json(ctx, todo_item.done_decoder())
+    todos.set_done(db, id, done) |> service.respond(ctx, todo_item.to_json)
+  })
+  |> controller.delete("/:id", fn(ctx) {
+    use id <- param.int(ctx, "id")
+    todos.delete(db, id) |> service.no_content(ctx)
+  })
+}

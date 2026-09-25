@@ -1,0 +1,123 @@
+//// The home page and the socket for its live todo list. Add routes here,
+//// or create more controllers and register them in `src/{{.Name}}.gleam`.
+
+import gleam/http
+import gloo/repo.{type Repo}
+import howdy/controller
+import howdy/cookie
+import howdy/ui
+import howdy/ui/live
+import howdy/ui/page
+import howdy/ui/theme
+import lustre/attribute as a
+import lustre/element.{text}
+import lustre/element/html as h
+import {{.Name}}/site/todo_list
+
+pub fn controller(db: Repo) {
+  controller.new("")
+  |> controller.get("/", home)
+  |> controller.route(http.Head, "/", home)
+  |> controller.get("/live/todos", fn(ctx) {
+    live.serve(ctx, todo_list.app(db), with: Nil)
+  })
+}
+
+/// Serves the Howdy UI stylesheet during `gleam dev`, so theme changes show
+/// up without a build step. `gleam run` serves the published copy from
+/// `priv/public/assets/ui.css`; regenerate it with `gleam run -m tasks/css`.
+pub fn stylesheet() {
+  ui.stylesheet(at: "/assets/ui.css", themes: theme.default_themes())
+}
+
+fn home(ctx: controller.Context) {
+  // The theme toggle stores the choice in a cookie; "system" follows the OS.
+  use theme <- cookie.string_or(ctx, "theme", default: "system")
+
+  page.new("{{.Title}}")
+  |> page.theme(theme)
+  |> page.stylesheet(at: "/assets/ui.css")
+  |> page.live
+  |> page.head([
+    h.link([a.rel("icon"), a.href("data:,")]),
+    h.link([a.rel("stylesheet"), a.href("/assets/style.css")]),
+  ])
+  |> page.body([
+    ui.container([], [
+      ui.stack([], [
+        ui.row([], [
+          ui.h1("Howdy, {{.Title}}!"),
+          ui.theme_toggle([text("Toggle theme")], from: "light", to: "dark"),
+        ]),
+        ui.p([
+          text("Your new Howdy project is running. "),
+          ui.muted("Edit this page and it reloads while gleam dev is running."),
+        ]),
+        live.mount("/live/todos"),
+        h.noscript([], [
+          ui.p([
+            text(
+              "Enable JavaScript to use the todo list, or use the JSON API at /api/todos.",
+            ),
+          ]),
+        ]),
+        ui.card([], [
+          ui.h2("Where things are"),
+          h.ul([a.class("home-list")], [
+            h.li([], [
+              h.code([], [text("src/{{.Name}}/site/todo_list.gleam")]),
+              text(" is the live todo list above."),
+            ]),
+            h.li([], [
+              h.code([], [text("src/{{.Name}}/todos/")]),
+              text(" holds the record, the database operations and the JSON API at "),
+              h.code([], [text("/api/todos")]),
+              text("."),
+            ]),
+            h.li([], [
+              h.code([], [text("src/{{.Name}}/migrations/")]),
+{{- if eq .Database "postgres"}}
+              text(" holds the schema; the database is PostgreSQL, started with "),
+              h.code([], [text("docker compose up -d")]),
+              text("."),
+{{- else}}
+              text(" holds the schema; the database is "),
+              h.code([], [text("{{.Name}}.sqlite3")]),
+              text("."),
+{{- end}}
+            ]),
+            h.li([], [
+              h.code([], [text("src/{{.Name}}.gleam")]),
+              text(" opens the database and registers controllers."),
+            ]),
+            h.li([], [
+              h.code([], [text("priv/public/")]),
+              text(" holds static files, served from the site root."),
+            ]),
+            h.li([], [
+              h.code([], [text("test/")]),
+{{- if eq .Database "postgres"}}
+              text(" runs each test against an emptied test database."),
+{{- else}}
+              text(" runs each test against a fresh in-memory database."),
+{{- end}}
+            ]),
+          ]),
+        ]),
+        ui.card([], [
+          ui.h2("Learn more"),
+          ui.p([
+            ui.link("https://gleam.run/documentation/", [text("Gleam docs")]),
+            text(" · "),
+            ui.link("https://hexdocs.pm/gloo/", [text("Gloo")]),
+            text(" · "),
+            ui.link("https://hexdocs.pm/lustre/", [text("Lustre")]),
+            text(" · "),
+            ui.muted("Howdy's README lives in the checkout next to this project."),
+          ]),
+        ]),
+      ]),
+    ]),
+  ])
+  |> page.respond(ctx)
+}

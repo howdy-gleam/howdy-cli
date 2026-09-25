@@ -1,0 +1,84 @@
+//// The home page. Add routes here, or create more controllers and register
+//// them in `src/{{.Name}}.gleam`.
+
+import gleam/http
+import howdy/controller
+import howdy/cookie
+import howdy/ui
+import howdy/ui/page
+import howdy/ui/theme
+import lustre/attribute as a
+import lustre/element.{text}
+import lustre/element/html as h
+
+pub fn controller() {
+  controller.new("")
+  |> controller.get("/", home)
+  |> controller.route(http.Head, "/", home)
+}
+
+/// Serves the Howdy UI stylesheet during `gleam dev`, so theme changes show
+/// up without a build step. `gleam run` serves the published copy from
+/// `priv/public/assets/ui.css`; regenerate it with `gleam run -m tasks/css`.
+pub fn stylesheet() {
+  ui.stylesheet(at: "/assets/ui.css", themes: theme.default_themes())
+}
+
+fn home(ctx: controller.Context) {
+  // The theme toggle stores the choice in a cookie; "system" follows the OS.
+  use theme <- cookie.string_or(ctx, "theme", default: "system")
+
+  page.new("{{.Title}}")
+  |> page.theme(theme)
+  |> page.stylesheet(at: "/assets/ui.css")
+  |> page.head([
+    h.link([a.rel("icon"), a.href("data:,")]),
+    h.link([a.rel("stylesheet"), a.href("/assets/style.css")]),
+  ])
+  |> page.body([
+    ui.container([], [
+      ui.stack([], [
+        ui.row([], [
+          ui.h1("Howdy, {{.Title}}!"),
+          ui.theme_toggle([text("Toggle theme")], from: "light", to: "dark"),
+        ]),
+        ui.p([
+          text("Your new Howdy project is running. "),
+          ui.muted("Edit this page and it reloads while gleam dev is running."),
+        ]),
+        ui.card([], [
+          ui.h2("Where things are"),
+          h.ul([a.class("home-list")], [
+            h.li([], [
+              h.code([], [text("src/{{.Name}}/site/site_controller.gleam")]),
+              text(" renders this page."),
+            ]),
+            h.li([], [
+              h.code([], [text("src/{{.Name}}.gleam")]),
+              text(" registers controllers and middleware."),
+            ]),
+            h.li([], [
+              h.code([], [text("priv/public/")]),
+              text(" holds static files, served from the site root."),
+            ]),
+            h.li([], [
+              h.code([], [text("test/")]),
+              text(" sends requests through the app with howdy/testing."),
+            ]),
+          ]),
+        ]),
+        ui.card([], [
+          ui.h2("Learn more"),
+          ui.p([
+            ui.link("https://gleam.run/documentation/", [text("Gleam docs")]),
+            text(" · "),
+            ui.link("https://github.com/hexdocs/lustre", [text("Lustre")]),
+            text(" · "),
+            ui.muted("Howdy's README lives in the checkout next to this project."),
+          ]),
+        ]),
+      ]),
+    ]),
+  ])
+  |> page.respond(ctx)
+}

@@ -1,0 +1,90 @@
+//// The {{.Singular}} record: types, validation, JSON codecs and the Gloo table.
+
+import gleam/dynamic/decode
+{{- if .HasKind "float"}}
+import gleam/int
+{{- end}}
+import gleam/json
+import gloo/schema
+{{- if .HasNonFloat}}
+import gloo/sql
+{{- end}}
+import gloo/value.{type GlooValue}
+import howdy/validate
+
+pub type {{.Type}} {
+  {{.Type}}(id: Int{{range .Fields}}, {{.Name}}: {{.GleamType}}{{end}})
+}
+
+/// Raw input from a request, before validation.
+pub type {{.Type}}Input {
+  {{.Type}}Input({{range $i, $f := .Fields}}{{if $i}}, {{end}}{{$f.Name}}: {{$f.GleamType}}{{end}})
+}
+
+/// Only `validate` can produce one, so the database operations can trust it.
+pub opaque type New{{.Type}} {
+  New{{.Type}}({{range $i, $f := .Fields}}{{if $i}}, {{end}}{{$f.Name}}: {{$f.GleamType}}{{end}})
+}
+
+/// Add rules from `howdy/validate` to each field's list, such as
+/// `validate.max_length(120)` or `validate.min(0)`.
+pub fn validate(input: {{.Type}}Input) -> validate.Result(New{{.Type}}) {
+{{- range .Fields}}
+  use {{.Name}} <- validate.field("{{.Name}}", input.{{.Name}}, {{.Rules}})
+{{- end}}
+  validate.ok(New{{.Type}}({{range $i, $f := .Fields}}{{if $i}}, {{end}}{{$f.Name}}:{{end}}))
+}
+
+/// The columns written by an insert or update.
+pub fn values(input: New{{.Type}}) -> List(#(String, GlooValue)) {
+  [
+{{- range .Fields}}
+    #("{{.Name}}", {{.SQLValue (printf "input.%s" .Name)}}),
+{{- end}}
+  ]
+}
+
+/// Decodes a request body.
+pub fn input_decoder() -> decode.Decoder({{.Type}}Input) {
+{{- range .Fields}}
+  use {{.Name}} <- decode.field("{{.Name}}", {{.JSONDecoder}})
+{{- end}}
+  decode.success({{.Type}}Input({{range $i, $f := .Fields}}{{if $i}}, {{end}}{{$f.Name}}:{{end}}))
+}
+
+/// Decodes the JSON written by `to_json`.
+pub fn decoder() -> decode.Decoder({{.Type}}) {
+  use id <- decode.field("id", decode.int)
+{{- range .Fields}}
+  use {{.Name}} <- decode.field("{{.Name}}", {{.JSONDecoder}})
+{{- end}}
+  decode.success({{.Type}}(id:{{range .Fields}}, {{.Name}}:{{end}}))
+}
+{{if .HasKind "float"}}
+// JSON writes 3.0 as 3, so accept whole numbers as floats too.
+fn number() -> decode.Decoder(Float) {
+  decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)])
+}
+{{end}}
+/// Columns are decoded by position, in the order of `columns`.
+pub fn table() -> schema.Table({{.Type}}) {
+  let decoder = {
+    use id <- decode.field(0, decode.int)
+{{- range $i, $f := .Fields}}
+    use {{$f.Name}} <- decode.field({{inc $i}}, {{$f.RowDecoder}})
+{{- end}}
+    decode.success({{.Type}}(id:{{range .Fields}}, {{.Name}}:{{end}}))
+  }
+  schema.Table(name: "{{.Plural}}", primary_key: "id", decoder:)
+}
+
+pub const columns = ["id"{{range .Fields}}, "{{.Name}}"{{end}}]
+
+pub fn to_json(item: {{.Type}}) -> json.Json {
+  json.object([
+    #("id", json.int(item.id)),
+{{- range .Fields}}
+    #("{{.Name}}", {{.JSONEncoder}}(item.{{.Name}})),
+{{- end}}
+  ])
+}

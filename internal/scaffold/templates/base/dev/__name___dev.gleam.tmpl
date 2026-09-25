@@ -1,0 +1,47 @@
+//// `gleam dev`: the same app with hot reload. Changes under `src/` rebuild
+//// and refresh open pages; changes under `priv/public/` refresh them too.
+//// Restart after editing `dev/`, `gleam.toml` or `.env`.
+{{- if .Full}}
+////
+//// The admin at `/_howdy` shows every request as a trace of what it did
+//// and the log lines it wrote. It is a dev dependency and lives only here,
+//// so `gleam run` and deployments never include it.
+{{- end}}
+
+import gleam/erlang/process
+import howdy
+{{- if .Full}}
+import howdy/admin
+{{- end}}
+import howdy/dev
+{{- if .Full}}
+import howdy/telemetry
+import howdy/telemetry/recorder
+{{- end}}
+import {{.Name}}
+import {{.Name}}/site/site_controller as site
+
+pub fn main() -> Nil {
+  {{.Name}}.load_environment()
+{{- if .Full}}
+  // Keep the newest 200 traces in memory for the admin's Telemetry pages.
+  let recorder = recorder.new(keep: 200)
+  let assert Ok(Nil) =
+    telemetry.new("{{.Name}}")
+    |> telemetry.record(recorder)
+    |> telemetry.start
+  let dashboard =
+    admin.new() |> admin.named("{{.Title}}") |> admin.telemetry(recorder)
+{{- end}}
+  let assert Ok(_) =
+    dev.new(fn() {
+      {{.Name}}.configured()
+      |> howdy.controller(site.stylesheet())
+{{- if .Full}}
+      |> admin.mount(dashboard)
+{{- end}}
+    })
+    |> dev.watch("priv/public")
+    |> dev.run
+  process.sleep_forever()
+}

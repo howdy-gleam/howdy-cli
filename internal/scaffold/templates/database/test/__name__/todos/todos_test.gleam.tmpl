@@ -1,0 +1,40 @@
+import {{.Name}}/support
+import {{.Name}}/todos/todo_item
+import {{.Name}}/todos/todos
+
+pub fn create_list_toggle_delete_test() {
+  use db <- support.with_db()
+  let assert Ok(first) = todos.create(db, support.new_todo("  Write docs  "))
+  assert first.title == "Write docs"
+  assert first.done == False
+  let assert Ok(second) = todos.create(db, support.new_todo("Ship it"))
+  assert todos.all(db) == Ok([first, second])
+
+  let assert Ok(done) = todos.set_done(db, first.id, True)
+  assert done.done == True
+  assert todos.find(db, first.id) == Ok(done)
+
+  assert todos.delete(db, second.id) == Ok(Nil)
+  assert todos.all(db) == Ok([done])
+}
+
+pub fn missing_todos_are_not_found_test() {
+  use db <- support.with_db()
+  let assert Error(_) = todos.find(db, 42)
+  let assert Error(_) = todos.set_done(db, 42, True)
+  let assert Error(_) = todos.delete(db, 42)
+}
+
+pub fn validation_rejects_blank_and_long_titles_test() {
+  let assert Error(_) = todo_item.validate(todo_item.TodoInput(title: "   "))
+  let too_long = todo_item.TodoInput(title: long_title(121))
+  let assert Error(_) = todo_item.validate(too_long)
+  let assert Ok(_) = todo_item.validate(todo_item.TodoInput(title: "ok"))
+}
+
+fn long_title(length: Int) -> String {
+  case length {
+    0 -> ""
+    n -> "x" <> long_title(n - 1)
+  }
+}

@@ -1,0 +1,14 @@
+//// Export the Howdy UI styles for publishing: `gleam run -m tasks/css`.
+//// Run it after changing themes or adding copied components, and commit
+//// the result.
+
+import gleam/io
+import howdy/ui/export
+import howdy/ui/theme
+
+pub fn main() -> Nil {
+  let assert Ok(Nil) =
+    export.new(theme.default_themes())
+    |> export.write(to: "priv/public/assets/ui.css")
+  io.println("wrote priv/public/assets/ui.css")
+}

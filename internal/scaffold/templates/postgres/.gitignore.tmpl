@@ -1,0 +1,12 @@
+*.beam
+*.ez
+/build
+erl_crash.dump
+
+# Local configuration
+.env
+{{- if .Full}}
+
+# Left behind if the console crashes mid-line
+src/gsh_eval_*.gleam
+{{- end}}

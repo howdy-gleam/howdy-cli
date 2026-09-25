@@ -1,0 +1,66 @@
+//// The todos context: every database operation on todos lives here and is
+//// shared by the JSON API and the live todo list.
+
+import gleam/result
+import gloo/query
+import gloo/repo.{type Repo}
+import gloo/sql
+import howdy/database
+import howdy/service
+import {{.Name}}/platform/errors
+import {{.Name}}/todos/todo_item.{type NewTodo, type Todo}
+
+pub fn all(db: Repo) -> service.Result(List(Todo)) {
+  query.from(todo_item.table())
+  |> query.order_by("id", query.Asc)
+  |> repo.query_all(db, _)
+  |> result.map_error(errors.from_db)
+}
+
+pub fn find(db: Repo, id: Int) -> service.Result(Todo) {
+  query.from(todo_item.table())
+  |> query.where(query.Eq("id", sql.int(id)))
+  |> repo.query_one(db, _)
+  |> result.map_error(errors.from_db)
+}
+
+pub fn create(db: Repo, input: NewTodo) -> service.Result(Todo) {
+  query.insert(query.from(todo_item.table()), todo_item.table(), [
+    #("title", sql.string(todo_item.title(input))),
+    #("done", sql.int(0)),
+  ])
+  |> query.returning_columns(["id", "title", "done"])
+  |> query.returning(todo_item.table().decoder)
+  |> repo.query_one(db, _)
+  |> result.map_error(errors.from_db)
+}
+
+pub fn set_done(db: Repo, id: Int, done: Bool) -> service.Result(Todo) {
+  let flag = case done {
+    True -> 1
+    False -> 0
+  }
+  query.from(todo_item.table())
+  |> query.update([#("done", sql.int(flag))])
+  |> query.where(query.Eq("id", sql.int(id)))
+  |> returning_todo(db, _)
+}
+
+pub fn delete(db: Repo, id: Int) -> service.Result(Nil) {
+  query.from(todo_item.table())
+  |> query.delete
+  |> query.where(query.Eq("id", sql.int(id)))
+  |> returning_todo(db, _)
+  |> result.map(fn(_) { Nil })
+}
+
+// One statement writes or removes the row and reports it, so a missing row
+// is a 404 with nothing in between.
+fn returning_todo(db: Repo, mutation: query.Query(Todo)) -> service.Result(Todo) {
+  database.returning(
+    db,
+    mutation,
+    ["id", "title", "done"],
+    or: service.NotFound("Record not found"),
+  )
+}

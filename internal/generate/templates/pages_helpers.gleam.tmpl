@@ -1,0 +1,210 @@
+//// Shared by the HTML pages that `howdy create pages` writes: the page
+//// layout, reading HTML forms, redirects and error pages. It is yours to
+//// change; the command only writes it when it is missing.
+
+import gleam/bit_array
+import gleam/float
+import gleam/http/response
+import gleam/int
+import gleam/list
+import gleam/result
+import gleam/string
+import gleam/uri
+import howdy/controller.{type Context}
+import howdy/cookie
+import howdy/service
+import howdy/ui
+import howdy/ui/button
+import howdy/ui/page
+import howdy/validate
+import lustre/attribute as a
+import lustre/element.{type Element, text}
+import lustre/element/html as h
+
+/// The fields of a submitted form, as the browser sent them.
+pub type Form =
+  List(#(String, String))
+
+// -- Layout ------------------------------------------------------------------
+
+/// A full page with the project's theme and stylesheets.
+pub fn layout(ctx: Context, title: String, body: List(Element(msg))) {
+  use theme <- cookie.string_or(ctx, "theme", default: "system")
+  page.new(title)
+  |> page.theme(theme)
+  |> page.stylesheet(at: "/assets/ui.css")
+  |> page.head([
+    h.link([a.rel("icon"), a.href("data:,")]),
+    h.link([a.rel("stylesheet"), a.href("/assets/style.css")]),
+    h.link([a.rel("stylesheet"), a.href("/assets/pages.css")]),
+  ])
+  |> page.body([
+    ui.container([], [
+      ui.stack([], [
+        ui.row([], [
+          ui.h1(title),
+          ui.theme_toggle([text("Toggle theme")], from: "light", to: "dark"),
+        ]),
+        ..body
+      ]),
+    ]),
+  ])
+  |> page.respond(ctx)
+}
+
+/// An error as a page, with the status that fits it: 404 for a missing
+/// record, 500 for a database failure and so on.
+pub fn error(ctx: Context, error: service.Error) {
+  layout(ctx, "Something went wrong", [
+    ui.card([], [
+      ui.p([text(service.message(error))]),
+      ui.p([ui.link("/", [text("Back to the home page")])]),
+    ]),
+  ])
+  |> controller.with_status(service.status_code(error))
+}
+
+/// Send the browser to another page after a successful form post.
+pub fn redirect(ctx: Context, to path: String) {
+  controller.status(ctx, 303)
+  |> response.set_header("location", path)
+}
+
+/// A link that looks like a button.
+pub fn button_link(
+  variant: button.Variant,
+  href: String,
+  label: String,
+) -> Element(msg) {
+  h.a(
+    [
+      ui.class(button.button_class(variant)),
+      a.class("page-button-link"),
+      a.href(href),
+    ],
+    [text(label)],
+  )
+}
+
+/// A submit button. `ui.button` renders type="button", which does not submit.
+pub fn submit(variant: button.Variant, label: String) -> Element(msg) {
+  h.button([ui.class(button.button_class(variant)), a.type_("submit")], [
+    text(label),
+  ])
+}
+
+/// A one-button form, for actions such as delete that must be a POST.
+pub fn action(
+  variant: button.Variant,
+  to path: String,
+  label label: String,
+) -> Element(msg) {
+  h.form([a.method("post"), a.action(path), a.class("page-action")], [
+    submit(variant, label),
+  ])
+}
+
+// -- Form fields -------------------------------------------------------------
+
+/// A labelled input with its value from the last submission and, if
+/// validation failed, the error for the field.
+pub fn field(
+  form: Form,
+  errors: List(service.FieldError),
+  name: String,
+  label: String,
+  attributes: List(a.Attribute(msg)),
+) -> Element(msg) {
+  let id = "field-" <> name
+  h.div([a.class("page-field")], [
+    ui.label([a.for(id)], [text(label)]),
+    ui.input([a.id(id), a.name(name), a.value(value(form, name)), ..attributes]),
+    field_error(errors, name),
+  ])
+}
+
+/// A labelled checkbox. Browsers leave an unticked checkbox out of the form.
+pub fn checkbox(form: Form, name: String, label: String) -> Element(msg) {
+  h.div([a.class("page-field")], [
+    h.label([a.class("page-checkbox")], [
+      h.input([a.type_("checkbox"), a.name(name), a.checked(checked(form, name))]),
+      text(label),
+    ]),
+  ])
+}
+
+fn field_error(errors: List(service.FieldError), name: String) -> Element(msg) {
+  case list.find(errors, fn(e) { e.field == name }) {
+    Ok(e) -> h.p([a.class("page-error"), a.role("alert")], [text(e.message)])
+    Error(Nil) -> element.none()
+  }
+}
+
+// -- Reading forms -----------------------------------------------------------
+
+/// Read a posted `application/x-www-form-urlencoded` body, up to 64 KB, and
+/// continue with its fields: `use form <- pages.read_form(ctx)`.
+pub fn read_form(ctx: Context, next) {
+  let form =
+    controller.read_body(ctx, limit: 65_536)
+    |> result.replace_error(Nil)
+    |> result.try(bit_array.to_string)
+    |> result.try(uri.parse_query)
+  case form {
+    Ok(form) -> next(form)
+    Error(Nil) ->
+      service.error_response(ctx, service.Invalid("the form could not be read"))
+  }
+}
+
+/// A field's text, or "" when the form does not have it.
+pub fn value(form: Form, name: String) -> String {
+  list.key_find(form, name) |> result.unwrap("")
+}
+
+/// Whether a checkbox was ticked: browsers send "on" for one that is.
+pub fn checked(form: Form, name: String) -> Bool {
+  value(form, name) != ""
+}
+
+/// Continue with a whole number, or fail with an error to show next to
+/// the input: `use age <- pages.whole_number(form, "age")`.
+pub fn whole_number(
+  form: Form,
+  name: String,
+  next: fn(Int) -> validate.Result(b),
+) -> validate.Result(b) {
+  case int.parse(string.trim(value(form, name))) {
+    Ok(n) -> next(n)
+    Error(Nil) -> invalid(name, "must be a whole number", next(0))
+  }
+}
+
+/// A number, with or without a decimal point.
+pub fn number(
+  form: Form,
+  name: String,
+  next: fn(Float) -> validate.Result(b),
+) -> validate.Result(b) {
+  let raw = string.trim(value(form, name))
+  case float.parse(raw), int.parse(raw) {
+    Ok(n), _ -> next(n)
+    _, Ok(n) -> next(int.to_float(n))
+    _, _ -> invalid(name, "must be a number", next(0.0))
+  }
+}
+
+// The rest of the form is still checked, with a stand-in value, so every
+// field's error shows at once. This field's error comes first, ahead of
+// any the stand-in caused.
+fn invalid(
+  name: String,
+  message: String,
+  rest: validate.Result(b),
+) -> validate.Result(b) {
+  let error = service.FieldError(name, message)
+  case rest {
+    Ok(_) -> Error([error])
+    Error(errors) -> Error([error, ..errors])
+  }
+}

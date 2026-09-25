@@ -1,0 +1,14 @@
+*.beam
+*.ez
+/build
+erl_crash.dump
+
+# Local configuration and database
+.env
+*.sqlite3
+*.sqlite3-*
+{{- if .Full}}
+
+# Left behind if the console crashes mid-line
+src/gsh_eval_*.gleam
+{{- end}}

@@ -1,0 +1,10 @@
+import gleeunit
+import {{.Name}}
+import {{.Name}}/support
+
+pub fn main() {
+  // So TEST_DATABASE_URL can be set in .env.
+  {{.Name}}.load_environment()
+  support.check_database()
+  gleeunit.main()
+}

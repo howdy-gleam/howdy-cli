@@ -1,0 +1,63 @@
+//// Shortcuts for the console, a Gleam REPL (GSH) running inside the server.
+//// Every session imports this module, so type `console.` and a name:
+////
+{{- if .Database}}
+////     gsh(1)> console.todos()
+////     gsh(2)> console.add_todo("Try the console")
+////     gsh(3)> console.get("/api/todos")
+{{- else}}
+////     gsh(1)> console.get("/")
+{{- end}}
+////
+//// The README shows how to open one on `gleam dev`. Add a function here for
+//// any job you do often. They run with the server's own
+{{- if .Database}} database connection
+//// and{{end}} no authorization of their own, so only the people who run the app
+//// should be able to reach the console.
+
+{{- if .Database}}
+import gloo/repo.{type Repo}
+import howdy/console as exposed
+import howdy/service
+{{- end}}
+import howdy/testing
+import {{.Name}}
+{{- if .Database}}
+import {{.Name}}/todos/todo_item.{type Todo, TodoInput}
+import {{.Name}}/todos/todos
+{{- end}}
+{{- if .Database}}
+
+/// What the running server exposed at startup. Fails on a node where the
+/// server has not started.
+pub fn services() -> {{.Name}}.Services {
+  case exposed.get({{.Name}}.services_key()) {
+    Ok(services) -> services
+    Error(Nil) ->
+      panic as "the server is not running on this node: open the console with the commands in the README"
+  }
+}
+
+/// The server's database, for `todos.all(console.db())` and the like.
+pub fn db() -> Repo {
+  services().db
+}
+
+pub fn todos() -> service.Result(List(Todo)) {
+  todos.all(db())
+}
+
+/// Add a todo. Open pages show it straight away.
+pub fn add_todo(title: String) -> service.Result(Todo) {
+  let assert Ok(input) = todo_item.validate(TodoInput(title:))
+    as "a title needs 1 to 120 characters"
+  todos.create(db(), input)
+}
+{{- end}}
+
+/// Send a GET request through the app without a socket, and return the
+/// status and body.
+pub fn get(path: String) -> #(Int, String) {
+  let response = testing.get(path) |> testing.send({{.Name}}.app({{if .Database}}db(){{end}}))
+  #(response.status, testing.text(response))
+}

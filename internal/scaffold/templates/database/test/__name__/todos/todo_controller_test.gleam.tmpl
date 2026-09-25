@@ -1,0 +1,56 @@
+import gleam/dynamic/decode
+import gleam/json
+import howdy/testing
+import {{.Name}}/support
+import {{.Name}}/todos/todo_item
+
+pub fn full_http_lifecycle_test() {
+  use db <- support.with_db()
+  let app = support.app(db)
+
+  let created =
+    testing.post("/api/todos", json.object([#("title", json.string("Read"))]))
+    |> testing.send(app)
+  assert created.status == 201
+  let assert Ok(item) = testing.json(created, todo_item.decoder())
+  assert item.title == "Read"
+  assert item.done == False
+
+  let fetched = testing.get("/api/todos/1") |> testing.send(app)
+  assert testing.json(fetched, todo_item.decoder()) == Ok(item)
+
+  let updated =
+    testing.patch("/api/todos/1", json.object([#("done", json.bool(True))]))
+    |> testing.send(app)
+  assert updated.status == 200
+  let assert Ok(done) = testing.json(updated, todo_item.decoder())
+  assert done.done == True
+
+  let listed = testing.get("/api/todos") |> testing.send(app)
+  assert testing.json(listed, decode.list(todo_item.decoder())) == Ok([done])
+
+  let deleted = testing.delete("/api/todos/1") |> testing.send(app)
+  assert deleted.status == 204
+  assert testing.send(testing.get("/api/todos/1"), app).status == 404
+  assert testing.send(testing.delete("/api/todos/1"), app).status == 404
+}
+
+pub fn blank_title_is_rejected_test() {
+  use db <- support.with_db()
+  let res =
+    testing.post("/api/todos", json.object([#("title", json.string("  "))]))
+    |> testing.send(support.app(db))
+  assert res.status == 422
+  let assert Ok([error]) = testing.field_errors(res)
+  assert error.field == "title"
+}
+
+pub fn bad_ids_and_bodies_are_rejected_test() {
+  use db <- support.with_db()
+  let app = support.app(db)
+  assert testing.send(testing.get("/api/todos/abc"), app).status == 400
+  let res =
+    testing.patch("/api/todos/1", json.object([#("nope", json.int(1))]))
+    |> testing.send(app)
+  assert res.status == 400
+}

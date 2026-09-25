@@ -1,0 +1,82 @@
+//// The PostgreSQL connection pool and the list of migrations.
+
+import gleam/erlang/process
+import gleam/option
+import gleam/otp/actor
+import gleam/result
+import gloo/adapter.{Adapter, PgConnection}
+import gloo/error
+import gloo/repo.{type Repo}
+import gloo/runner
+import gloo/telemetry
+{{- if .Full}}
+import howdy/database
+{{- end}}
+import pog
+import {{.Name}}/migrations/create_todos
+
+/// The database `docker compose up -d` starts, used when `DATABASE_URL` is
+/// not set.
+pub const default_url = "postgres://postgres:postgres@127.0.0.1:5432/{{.Name}}_dev"
+
+/// Start a pog connection pool for a `postgres://user:password@host:port/name`
+/// URL and wrap it in a Gloo repo. Gloo's own Postgres adapter takes no port
+/// or URL, so the pool is configured with pog here. Add pog settings such as
+/// `pog.pool_size` or `pog.ssl` to the config below.
+pub fn connect(url: String) -> Result(Repo, String) {
+  let name = process.new_name(prefix: "{{.Name}}_db")
+  use config <- result.try(
+    pog.url_config(name, url)
+    |> result.replace_error("the database URL is not a valid postgres:// URL"),
+  )
+  use actor.Started(pid:, data: conn) <- result.try(
+    pog.start(config)
+    |> result.replace_error("the database connection pool did not start"),
+  )
+  let db =
+    repo.from_adapter(Adapter(
+      name: "postgres",
+      connection: PgConnection(conn:, pid:),
+      quote_identifier: adapter.postgres_quote,
+      placeholder: adapter.postgres_placeholder,
+      savepoint_depth: 0,
+      telemetry: telemetry.disabled(),
+    ))
+{{- if .Full}}
+    // Report every query as a span, so traces show the SQL a request ran.
+    |> database.traced
+{{- end}}
+  use _ <- result.try(wait_until_ready(db, 5))
+  Ok(db)
+}
+
+// The pool connects in the background, and a server started a moment ago
+// may still be booting, so try for about ten seconds before giving up: a
+// query waits a couple of seconds for a connection before it fails.
+fn wait_until_ready(db: Repo, attempts: Int) -> Result(Nil, String) {
+  case repo.execute(db, "SELECT 1", []) {
+    Ok(_) -> Ok(Nil)
+    Error(_) if attempts > 1 -> {
+      process.sleep(250)
+      wait_until_ready(db, attempts - 1)
+    }
+    Error(e) ->
+      Error(
+        "could not reach PostgreSQL ("
+        <> error.to_string(e)
+        <> "). Is it running? Start it with `docker compose up -d`.",
+      )
+  }
+}
+
+/// Apply every migration that has not run yet. Add new migrations to the
+/// list with a higher version; never edit one that has been applied.
+pub fn migrate(db: Repo) -> Result(Int, String) {
+  runner.run(db, [create_todos.migration()], runner.Up, option.None)
+  |> result.map_error(fn(e) {
+    case e {
+      runner.DbError(message) -> message
+      runner.MigrationFailed(_, _, message) -> message
+    }
+  })
+}

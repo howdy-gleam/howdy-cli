@@ -1,0 +1,117 @@
+//// Composition root. The database is opened once here and passed to the
+//// slices that need it.
+////
+//// `gleam run` starts the server. `gleam dev` (see `dev/`) serves the same
+//// app with hot reload{{if .Full}}, the admin and telemetry{{end}}.
+
+import dot_env
+import dot_env/env
+import gleam/erlang/process
+import gloo/adapter/sqlite
+import gloo/repo.{type Repo}
+import howdy
+{{- if .Full}}
+import howdy/console
+import howdy/database as howdy_database
+{{- end}}
+import howdy/logger
+import howdy/static
+{{- if .Full}}
+import howdy/telemetry
+{{- end}}
+import logging
+import {{.Name}}/platform/database
+import {{.Name}}/site/site_controller as site
+import {{.Name}}/todos/todo_controller as todos
+
+/// The app without a listener, so tests can send requests through it with
+/// `howdy/testing`. Register new controllers here.
+pub fn app(db: Repo) -> howdy.App {
+  howdy.new()
+  |> howdy.controller(todos.controller(db))
+  |> howdy.controller(site.controller(db))
+  // The root static controller is a catch-all, so mount it last.
+  |> howdy.controller(static.serve("/", from: "priv/public"))
+}
+
+/// Configure logging and load `.env` from the working directory. Call once
+/// at startup. Set `DOT_ENV_PATH` to read a different file.
+pub fn load_environment() -> Nil {
+  logging.configure()
+  dot_env.new_with_path(env.get_string_or("DOT_ENV_PATH", ".env"))
+  |> dot_env.load
+}
+
+/// Open the SQLite database named by `DATABASE_PATH` and apply the
+/// connection settings. The parent directory must exist.
+pub fn database() -> Repo {
+  let assert Ok(db) =
+    sqlite.start(sqlite.file(env.get_string_or("DATABASE_PATH", "{{.Name}}.sqlite3")))
+  let assert Ok(_) = database.configure(db)
+{{- if .Full}}
+  // Report every query as a span, so traces show the SQL a request ran.
+  howdy_database.traced(db)
+{{- else}}
+  db
+{{- end}}
+}
+{{- if .Full}}
+
+/// What a console attached to the running server can reach. Add anything
+/// else `main` builds that you want to use from `src/console.gleam`.
+pub type Services {
+  Services(db: Repo)
+}
+
+/// The key the services are exposed under. Declare it once, here.
+pub fn services_key() -> console.Key(Services) {
+  console.key("{{.Name}}")
+}
+
+/// Make the services available to a console on this node. Call once at
+/// startup, never per request.
+pub fn expose(db: Repo) -> Nil {
+  console.expose(services_key(), Services(db:))
+}
+
+/// Send a trace of every request to an OpenTelemetry collector when
+/// `OTEL_EXPORTER_OTLP_ENDPOINT` is set, such as `http://localhost:4318`.
+/// Without it nothing is recorded or sent. `gleam dev` records into the
+/// admin instead.
+pub fn start_telemetry() -> Nil {
+  case telemetry.from_env("{{.Name}}") {
+    Ok(config) -> {
+      let assert Ok(Nil) = telemetry.start(config)
+      Nil
+    }
+    Error(Nil) -> Nil
+  }
+}
+{{- end}}
+
+/// The app with request logging, bound to localhost on `PORT`.
+pub fn configured(db: Repo) -> howdy.App {
+  let port = env.get_int_or("PORT", 8787)
+  let assert True = port > 0 && port <= 65_535 as "PORT must be 1-65535"
+  app(db)
+  |> howdy.middleware(logger.log)
+  |> howdy.bind("127.0.0.1")
+  |> howdy.listening(port)
+}
+
+pub fn main() -> Nil {
+  load_environment()
+{{- if .Full}}
+  start_telemetry()
+{{- end}}
+  let db = database()
+  // Migrations run at startup so `gleam run` works straight away. For a
+  // production deployment you may prefer to migrate separately with
+  // `gleam run -m tasks/migrate` and remove this line.
+  let assert Ok(_) = database.migrate(db)
+{{- if .Full}}
+  expose(db)
+{{- end}}
+  let assert Ok(_) = configured(db) |> howdy.start
+  process.sleep_forever()
+}

@@ -1,0 +1,47 @@
+import {{.Project.Name}}/support
+import {{.Project.Name}}/{{.Plural}}/{{.Singular}}
+import {{.Project.Name}}/{{.Plural}}/{{.Plural}}
+
+// Fixtures go through the same validator as requests.
+fn first() -> {{.Singular}}.New{{.Type}} {
+  let assert Ok(input) =
+    {{.Singular}}.validate({{.Singular}}.{{.Type}}Input({{range $i, $f := .Fields}}{{if $i}}, {{end}}{{$f.Name}}: {{$f.SampleGleam}}{{end}}))
+  input
+}
+
+fn changed() -> {{.Singular}}.New{{.Type}} {
+  let assert Ok(input) =
+    {{.Singular}}.validate({{.Singular}}.{{.Type}}Input({{range $i, $f := .Fields}}{{if $i}}, {{end}}{{$f.Name}}: {{$f.ChangedGleam}}{{end}}))
+  input
+}
+
+pub fn create_find_update_delete_test() {
+  use db <- support.with_db()
+  let assert Ok(item) = {{.Plural}}.create(db, first())
+{{- range .Fields}}
+  assert item.{{.Name}} == {{.SampleGleam}}
+{{- end}}
+  assert {{.Plural}}.find(db, item.id) == Ok(item)
+
+  let assert Ok(item) = {{.Plural}}.update(db, item.id, changed())
+{{- range .Fields}}
+  assert item.{{.Name}} == {{.ChangedGleam}}
+{{- end}}
+  assert {{.Plural}}.all(db) == Ok([item])
+
+  assert {{.Plural}}.delete(db, item.id) == Ok(Nil)
+  assert {{.Plural}}.all(db) == Ok([])
+}
+
+pub fn missing_{{.Plural}}_are_not_found_test() {
+  use db <- support.with_db()
+  let assert Error(_) = {{.Plural}}.find(db, 42)
+  let assert Error(_) = {{.Plural}}.update(db, 42, first())
+  let assert Error(_) = {{.Plural}}.delete(db, 42)
+}
+{{with .FirstString}}
+pub fn blank_{{.Name}}_is_rejected_test() {
+  let assert Error(_) =
+    {{$.Singular}}.validate({{$.Singular}}.{{$.Type}}Input({{range $i, $f := $.Fields}}{{if $i}}, {{end}}{{$f.Name}}: {{if eq $f.Name $.FirstString.Name}}"  "{{else}}{{$f.SampleGleam}}{{end}}{{end}}))
+}
+{{end}}

@@ -1,0 +1,55 @@
+import gleam/http
+import gleam/http/response
+import gleam/string
+import howdy/testing
+import {{.Name}}/support
+
+pub fn home_page_test() {
+  use db <- support.with_db()
+  let res = testing.get("/") |> testing.send(support.app(db))
+  assert res.status == 200
+  assert response.get_header(res, "content-type")
+    == Ok("text/html; charset=utf-8")
+  assert string.contains(testing.text(res), "Howdy, {{.Title}}!")
+  // The todo list is a live component mounted on the page.
+  assert string.contains(testing.text(res), "lustre-server-component")
+}
+
+pub fn home_page_supports_head_test() {
+  use db <- support.with_db()
+  let res = testing.request(http.Head, "/") |> testing.send(support.app(db))
+  assert res.status == 200
+}
+
+pub fn home_page_uses_theme_cookie_test() {
+  use db <- support.with_db()
+  let res =
+    testing.get("/")
+    |> testing.cookie("theme", "dark")
+    |> testing.send(support.app(db))
+  assert string.contains(testing.text(res), "data-theme=\"dark\"")
+}
+
+pub fn live_route_requires_websocket_test() {
+  use db <- support.with_db()
+  assert testing.send(testing.get("/live/todos"), support.app(db)).status
+    == 426
+}
+
+pub fn assets_are_served_test() {
+  use db <- support.with_db()
+  let app = support.app(db)
+  let ui = testing.get("/assets/ui.css") |> testing.send(app)
+  assert ui.status == 200
+  assert string.contains(testing.text(ui), "--howdy-primary")
+  let css = testing.get("/assets/style.css") |> testing.send(app)
+  assert css.status == 200
+  assert response.get_header(css, "content-type") == Ok("text/css; charset=utf-8")
+}
+
+pub fn unknown_routes_are_not_found_test() {
+  use db <- support.with_db()
+  let app = support.app(db)
+  assert testing.send(testing.get("/missing"), app).status == 404
+  assert testing.send(testing.get("/gleam.toml"), app).status == 404
+}

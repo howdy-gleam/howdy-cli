@@ -1,0 +1,29 @@
+# PostgreSQL for development and tests: `docker compose up -d`.
+#
+# The first start creates the databases {{.Name}}_dev (POSTGRES_DB) and
+# {{.Name}}_test (docker/postgres/init.sql). Data is kept in a named volume;
+# `docker compose down -v` deletes it so the next start begins empty.
+#
+# If port 5432 is taken, change the left-hand side of `ports` and the port in
+# DATABASE_URL and TEST_DATABASE_URL (see .env.example).
+services:
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: {{.Name}}_dev
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d {{.Name}}_dev"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+
+volumes:
+  postgres_data:

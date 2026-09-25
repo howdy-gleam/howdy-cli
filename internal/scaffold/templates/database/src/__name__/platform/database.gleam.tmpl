@@ -1,0 +1,31 @@
+//// Connection settings and the list of migrations.
+
+import gleam/option
+import gleam/result
+import gloo/error
+import gloo/repo.{type Repo}
+import gloo/runner
+import {{.Name}}/migrations/create_todos
+
+/// Settings every connection needs, in development, tests and production.
+pub fn configure(db: Repo) -> Result(Int, String) {
+  use _ <- result.try(
+    repo.execute(db, "PRAGMA foreign_keys = ON", [])
+    |> result.map_error(error.to_string),
+  )
+  repo.execute(db, "PRAGMA busy_timeout = 5000", [])
+  |> result.map_error(error.to_string)
+}
+
+/// Apply every migration that has not run yet. Add new migrations to the
+/// list with a higher version; never edit one that has been applied.
+pub fn migrate(db: Repo) -> Result(Int, String) {
+  use _ <- result.try(configure(db))
+  runner.run(db, [create_todos.migration()], runner.Up, option.None)
+  |> result.map_error(fn(e) {
+    case e {
+      runner.DbError(message) -> message
+      runner.MigrationFailed(_, _, message) -> message
+    }
+  })
+}

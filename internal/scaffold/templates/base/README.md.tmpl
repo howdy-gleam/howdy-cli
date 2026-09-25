@@ -1,0 +1,153 @@
+# {{.Title}}
+
+A web application built with **Gleam** and **Howdy**, created by `howdy new`.
+It serves a themed home page built from Howdy UI components, static files
+from `priv/public`, and comes with hot reload for development and a test
+suite that sends requests through the app.
+{{- if .Full}}
+
+Under `gleam dev` the Howdy admin shows {{if .Database}}the database and {{end}}a trace
+of every request, and a console runs Gleam inside the server.
+{{- end}}
+
+## Requirements
+
+- Gleam 1.18+ and Erlang/OTP
+- Git to download Howdy, Howdy UI and the development-only {{if .Full}}hot reload,
+  admin and console packages{{else}}hot reload
+  package{{end}} from GitHub at the Howdy {{.Release}} release, tag
+  `v{{.Release}}`, as configured in `gleam.toml`.
+
+## Start the dev server
+
+```sh
+gleam deps download
+gleam dev
+```
+
+Open **http://127.0.0.1:8787**{{if .Full}} for the site and
+**http://127.0.0.1:8787/_howdy** for the admin{{end}}. Changes under `src/` rebuild and refresh
+open pages; changes under `priv/public/` refresh them too. Compile errors
+show in the browser while the previous code keeps serving. Restart after
+editing `dev/`, `gleam.toml` or `.env`.
+
+{{- if .Full}}
+
+### The admin
+
+**http://127.0.0.1:8787/_howdy** is the Howdy admin, mounted by
+`dev/{{.Name}}_dev.gleam`:
+
+- **Telemetry** shows every request as a timeline of its spans and the log
+  lines it wrote, and points out failures.
+
+The admin has no login, so it only exists under `gleam dev`, answers only on
+localhost, and never ships: it is a dev dependency, and `gleam run` and
+`gleam export erlang-shipment` leave `dev/` out.
+
+### The console
+
+The console is [GSH](https://hexdocs.pm/gsh/), a Gleam REPL, running inside
+the dev server, so what you type uses the same processes as the site.
+Shortcuts live in `src/console.gleam`, which every session imports.
+
+Start the dev server inside a console, in one terminal:
+
+```sh
+gleam run -m gsh -- {{.Name}}_dev
+```
+
+The site, hot reload and the admin all run as usual, with a prompt:
+
+```text
+gsh(1)> console.get("/")
+```
+
+To attach to a dev server that is already running, start it as a named
+Erlang node, then attach from a second terminal:
+
+```sh
+# Terminal 1
+ERL_EPMD_ADDRESS=127.0.0.1 \
+ERL_FLAGS="-sname {{.Name}}@localhost -setcookie dev -kernel inet_dist_use_interface {127,0,0,1}" \
+gleam dev
+
+# Terminal 2
+ERL_FLAGS="-kernel inet_dist_use_interface {127,0,0,1}" \
+gleam run -m gsh -- --remsh {{.Name}}@localhost --cookie dev
+```
+
+GSH says `Connected to remote node`. The flags keep the node on 127.0.0.1:
+anyone who can connect to it can run any code in your app, so never expose
+it beyond your machine. GSH compiles each line in `src/`, so open pages
+refresh after every command.
+
+### Without hot reload
+{{- end}}
+
+`gleam run` starts the server without the reload watcher.
+
+## Configuration
+
+Configuration is read from the environment, with `.env` in the working
+directory loaded first. Copy `.env.example` to `.env` to change it.
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `PORT` | `8787` | Listening port on 127.0.0.1 |
+| `DOT_ENV_PATH` | `.env` | Which file to load, set in the shell |
+{{- if .Full}}
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | unset | `gleam run` sends traces to this OpenTelemetry collector, such as `http://localhost:4318` |
+{{- end}}
+
+## Test
+
+```sh
+gleam test
+```
+
+Tests use `howdy/testing` to send requests straight to the app, without a
+socket. See `test/{{.Name}}/site/site_controller_test.gleam`.
+
+## Layout
+
+```text
+src/
+├── {{.Name}}.gleam           # composition root: controllers, middleware, listener
+{{- if .Full}}
+├── console.gleam             # console shortcuts
+{{- end}}
+├── {{.Name}}/
+│   └── site/
+│       └── site_controller.gleam  # the home page
+└── tasks/
+    └── css.gleam            # writes priv/public/assets/ui.css
+dev/
+└── {{.Name}}_dev.gleam      # `gleam dev` entry point with hot reload{{if .Full}}, admin and telemetry{{end}}
+priv/public/
+└── assets/
+    ├── style.css            # your styles
+    └── ui.css               # generated Howdy UI styles (commit it)
+test/
+```
+
+Group new features by folder under `src/{{.Name}}/`, each with its own
+controller, and register the controller in `src/{{.Name}}.gleam`.
+
+## Styles
+
+During `gleam dev` the Howdy UI stylesheet is generated on request. For
+`gleam run` and deployment it is read from disk, so regenerate it after
+changing themes or adding copied components:
+
+```sh
+gleam run -m tasks/css
+```
+
+## Upgrading Howdy
+
+This project uses Howdy {{.Release}}: every Howdy package in `gleam.toml`
+comes from the release tag `v{{.Release}}`, so they always match. To move
+to a newer release, change `ref = "v{{.Release}}"` to the new tag on every
+one of them, run `gleam deps download`, and check the release's notes for
+anything you need to change.

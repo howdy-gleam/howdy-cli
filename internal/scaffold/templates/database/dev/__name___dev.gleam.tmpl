@@ -1,0 +1,60 @@
+//// `gleam dev`: the same app with hot reload. Changes under `src/` rebuild
+//// and refresh open pages; changes under `priv/public/` refresh them too.
+//// Restart after editing `dev/`, `gleam.toml` or `.env`.
+////
+//// The database is opened and migrated once; the app is rebuilt around it
+//// on every request so reloaded modules are used at once.
+{{- if .Full}}
+////
+//// The admin at `/_howdy` browses and edits the database and shows every
+//// request as a trace of its queries and logs. It is a dev dependency and
+//// lives only here, so `gleam run` and deployments never include it.
+{{- end}}
+
+import gleam/erlang/process
+import howdy
+{{- if .Full}}
+import howdy/admin
+{{- end}}
+import howdy/dev
+{{- if .Full}}
+import howdy/telemetry
+import howdy/telemetry/recorder
+{{- end}}
+import {{.Name}}
+import {{.Name}}/platform/database
+import {{.Name}}/site/site_controller as site
+
+pub fn main() -> Nil {
+  {{.Name}}.load_environment()
+{{- if .Full}}
+  // Keep the newest 200 traces in memory for the admin's Telemetry pages.
+  let recorder = recorder.new(keep: 200)
+  let assert Ok(Nil) =
+    telemetry.new("{{.Name}}")
+    |> telemetry.record(recorder)
+    |> telemetry.start
+{{- end}}
+  let db = {{.Name}}.database()
+  let assert Ok(_) = database.migrate(db)
+{{- if .Full}}
+  // For a console attached to this server: see src/console.gleam.
+  {{.Name}}.expose(db)
+  let dashboard =
+    admin.new()
+    |> admin.named("{{.Title}}")
+    |> admin.database(db)
+    |> admin.telemetry(recorder)
+{{- end}}
+  let assert Ok(_) =
+    dev.new(fn() {
+      {{.Name}}.configured(db)
+      |> howdy.controller(site.stylesheet())
+{{- if .Full}}
+      |> admin.mount(dashboard)
+{{- end}}
+    })
+    |> dev.watch("priv/public")
+    |> dev.run
+  process.sleep_forever()
+}

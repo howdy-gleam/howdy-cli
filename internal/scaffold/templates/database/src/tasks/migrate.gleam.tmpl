@@ -1,0 +1,13 @@
+//// Apply pending migrations without starting the server:
+//// `gleam run -m tasks/migrate`. Uses `.env` and `{{if eq .Database "postgres"}}DATABASE_URL{{else}}DATABASE_PATH{{end}}` like the app.
+
+import gleam/int
+import gleam/io
+import {{.Name}}
+import {{.Name}}/platform/database
+
+pub fn main() -> Nil {
+  {{.Name}}.load_environment()
+  let assert Ok(applied) = database.migrate({{.Name}}.database())
+  io.println("applied " <> int.to_string(applied) <> " migration(s)")
+}

@@ -1,0 +1,36 @@
+name = "{{.Name}}"
+version = "0.1.0"
+
+description = "A Howdy web application with a SQLite database"
+target = "erlang"
+
+[dependencies]
+gleam_stdlib = ">= 1.0.0 and < 2.0.0"
+gleam_erlang = ">= 1.3.0 and < 2.0.0"
+gleam_http = ">= 4.4.0 and < 5.0.0"
+gleam_json = ">= 3.1.0 and < 4.0.0"
+logging = ">= 1.5.0 and < 2.0.0"
+lustre = ">= 5.7.0 and < 6.0.0"
+dot_env = ">= 1.3.0 and < 2.0.0"
+gloo = ">= 1.0.2 and < 2.0.0"
+howdy = { git = "https://github.com/mikeyjones/howdy.git", ref = "v{{.Release}}" }
+howdy_ui = { git = "https://github.com/mikeyjones/howdy.git", ref = "v{{.Release}}", path = "ui" }
+howdy_database = { git = "https://github.com/mikeyjones/howdy.git", ref = "v{{.Release}}", path = "database" }
+{{- if .Full}}
+howdy_telemetry = { git = "https://github.com/mikeyjones/howdy.git", ref = "v{{.Release}}", path = "telemetry" }
+{{- end}}
+
+[dev_dependencies]
+howdy_dev = { git = "https://github.com/mikeyjones/howdy.git", ref = "v{{.Release}}", path = "howdy_dev" }
+{{- if .Full}}
+howdy_admin = { git = "https://github.com/mikeyjones/howdy.git", ref = "v{{.Release}}", path = "admin" }
+gsh = ">= 1.3.0 and < 2.0.0"
+{{- end}}
+gleeunit = ">= 1.0.0 and < 2.0.0"
+{{- if .Full}}
+
+# The console: `gleam run -m gsh`. Every session imports these modules;
+# src/console.gleam holds the shortcuts.
+[tools.gsh]
+imports = ["console", "gleam/list", "gleam/option", "gleam/result"]
+{{- end}}

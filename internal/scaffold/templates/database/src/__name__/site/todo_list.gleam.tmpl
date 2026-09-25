@@ -1,0 +1,138 @@
+//// The todo list on the home page: a Lustre server component. The model,
+//// update and view all run on the server; the browser renders the diffs
+//// it receives over a WebSocket. Every tab gets its own copy.
+
+import gleam/int
+import gleam/list
+import gloo/repo.{type Repo}
+import howdy/service
+import howdy/ui
+import howdy/ui/button
+import lustre
+import lustre/attribute as a
+import lustre/component
+import lustre/effect
+import lustre/element.{type Element, text}
+import lustre/element/html as h
+import lustre/element/keyed
+import lustre/event
+import {{.Name}}/todos/todo_item.{type Todo}
+import {{.Name}}/todos/todos
+
+pub type Model {
+  Model(todos: List(Todo), draft: String, notice: String)
+}
+
+pub type Msg {
+  Draft(String)
+  Add
+  Toggle(Int, Bool)
+  Delete(Int)
+}
+
+pub fn app(db: Repo) -> lustre.App(Nil, Model, Msg) {
+  lustre.component(
+    fn(_) {
+      #(reload(db, Model(todos: [], draft: "", notice: "")), effect.none())
+    },
+    fn(model, msg) { #(update(db, model, msg), effect.none()) },
+    view,
+    [component.open_shadow_root(True), component.adopt_styles(True)],
+  )
+}
+
+fn reload(db: Repo, model: Model) -> Model {
+  case todos.all(db) {
+    Ok(todos) -> Model(..model, todos:)
+    Error(error) -> Model(..model, notice: service.message(error))
+  }
+}
+
+fn update(db: Repo, model: Model, msg: Msg) -> Model {
+  case msg {
+    Draft(draft) -> Model(..model, draft:)
+    Add ->
+      case todo_item.validate(todo_item.TodoInput(title: model.draft)) {
+        Error([service.FieldError(_, message), ..]) ->
+          Model(..model, notice: message)
+        Error([]) -> Model(..model, notice: "Invalid todo")
+        Ok(input) ->
+          case todos.create(db, input) {
+            Ok(_) -> reload(db, Model(..model, draft: "", notice: ""))
+            Error(error) -> Model(..model, notice: service.message(error))
+          }
+      }
+    Toggle(id, done) -> after(db, model, todos.set_done(db, id, done))
+    Delete(id) -> after(db, model, todos.delete(db, id))
+  }
+}
+
+fn after(db: Repo, model: Model, result: service.Result(a)) -> Model {
+  case result {
+    Ok(_) -> reload(db, Model(..model, notice: ""))
+    Error(error) -> Model(..model, notice: service.message(error))
+  }
+}
+
+fn view(model: Model) -> Element(Msg) {
+  ui.card([], [
+    ui.h2("Todos"),
+    h.form([a.class("todo-form"), event.on_submit(fn(_) { Add })], [
+      ui.input([
+        a.name("title"),
+        a.placeholder("What needs doing?"),
+        a.value(model.draft),
+        a.maxlength(120),
+        a.autocomplete("off"),
+        a.attribute("aria-label", "New todo"),
+        event.on_input(Draft),
+      ]),
+      // `ui.button` renders type="button", so the submit button is built
+      // directly with the same class.
+      h.button(
+        [ui.class(button.button_class(button.Primary)), a.type_("submit")],
+        [text("Add")],
+      ),
+    ]),
+    case model.notice {
+      "" -> element.none()
+      notice ->
+        h.p([a.class("todo-notice"), a.role("status")], [text(notice)])
+    },
+    case model.todos {
+      [] -> ui.p([ui.muted("Nothing to do yet. Add your first todo above.")])
+      items ->
+        keyed.ul(
+          [a.class("todo-list")],
+          list.map(items, fn(item) { #(int.to_string(item.id), row(item)) }),
+        )
+    },
+    ui.p([ui.muted(summary(model.todos))]),
+  ])
+}
+
+fn row(item: Todo) -> Element(Msg) {
+  h.li([a.class("todo-row"), a.classes([#("done", item.done)])], [
+    h.label([a.class("todo-label")], [
+      h.input([
+        a.type_("checkbox"),
+        a.checked(item.done),
+        event.on_check(Toggle(item.id, _)),
+      ]),
+      h.span([], [text(item.title)]),
+    ]),
+    ui.button(
+      button.Secondary,
+      [
+        a.attribute("aria-label", "Delete " <> item.title),
+        event.on_click(Delete(item.id)),
+      ],
+      [text("Delete")],
+    ),
+  ])
+}
+
+fn summary(items: List(Todo)) -> String {
+  let done = list.count(items, fn(item) { item.done })
+  int.to_string(done) <> " of " <> int.to_string(list.length(items)) <> " done"
+}

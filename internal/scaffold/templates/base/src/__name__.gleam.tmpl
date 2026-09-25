@@ -1,0 +1,69 @@
+//// Composition root. Build the app here and start it from `main`.
+////
+//// `gleam run` starts the server. `gleam dev` (see `dev/`) serves the same
+//// app with hot reload{{if .Full}}, the admin and telemetry{{end}}.
+
+import dot_env
+import dot_env/env
+import gleam/erlang/process
+import howdy
+import howdy/logger
+import howdy/static
+{{- if .Full}}
+import howdy/telemetry
+{{- end}}
+import logging
+import {{.Name}}/site/site_controller as site
+
+/// The app without a listener, so tests can send requests through it with
+/// `howdy/testing`. Register new controllers here.
+pub fn app() -> howdy.App {
+  howdy.new()
+  |> howdy.controller(site.controller())
+  // The root static controller is a catch-all, so mount it last.
+  |> howdy.controller(static.serve("/", from: "priv/public"))
+}
+
+/// Configure logging and load `.env` from the working directory. Call once
+/// at startup. Set `DOT_ENV_PATH` to read a different file.
+pub fn load_environment() -> Nil {
+  logging.configure()
+  dot_env.new_with_path(env.get_string_or("DOT_ENV_PATH", ".env"))
+  |> dot_env.load
+}
+
+/// The app with request logging, bound to localhost on `PORT`.
+pub fn configured() -> howdy.App {
+  let port = env.get_int_or("PORT", 8787)
+  let assert True = port > 0 && port <= 65_535 as "PORT must be 1-65535"
+  app()
+  |> howdy.middleware(logger.log)
+  |> howdy.bind("127.0.0.1")
+  |> howdy.listening(port)
+}
+
+{{- if .Full}}
+
+/// Send a trace of every request to an OpenTelemetry collector when
+/// `OTEL_EXPORTER_OTLP_ENDPOINT` is set, such as `http://localhost:4318`.
+/// Without it nothing is recorded or sent. `gleam dev` records into the
+/// admin instead.
+pub fn start_telemetry() -> Nil {
+  case telemetry.from_env("{{.Name}}") {
+    Ok(config) -> {
+      let assert Ok(Nil) = telemetry.start(config)
+      Nil
+    }
+    Error(Nil) -> Nil
+  }
+}
+{{- end}}
+
+pub fn main() -> Nil {
+  load_environment()
+{{- if .Full}}
+  start_telemetry()
+{{- end}}
+  let assert Ok(_) = configured() |> howdy.start
+  process.sleep_forever()
+}

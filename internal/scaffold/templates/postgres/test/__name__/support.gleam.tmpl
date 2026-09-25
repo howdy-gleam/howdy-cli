@@ -1,0 +1,74 @@
+//// Test helpers: every test gets the migrated test database with its tables
+//// emptied and ids restarted. Tests run one at a time, so they can share it.
+////
+//// The database is `TEST_DATABASE_URL`, by default the {{.Name}}_test database
+//// that `docker compose up -d` creates. Never point it at data you care
+//// about: every table in the public schema is truncated.
+
+import dot_env/env
+import gleam/dynamic/decode
+import gleam/string
+import gloo/repo.{type Repo}
+import {{.Name}}
+import {{.Name}}/platform/database
+import {{.Name}}/todos/todo_item
+
+const default_url = "postgres://postgres:postgres@127.0.0.1:5432/{{.Name}}_test"
+
+pub fn with_db(run_test: fn(Repo) -> a) -> a {
+  let db = connect()
+  use <- cleanup(fn() {
+    let _ = repo.close(db)
+    Nil
+  })
+  let assert Ok(_) = database.migrate(db)
+  let assert Ok(_) = empty(db)
+  run_test(db)
+}
+
+/// Called before the tests start, so a server that is not running fails the
+/// run once instead of once per test.
+pub fn check_database() -> Nil {
+  let _ = repo.close(connect())
+  Nil
+}
+
+fn connect() -> Repo {
+  case database.connect(env.get_string_or("TEST_DATABASE_URL", default_url)) {
+    Ok(db) -> db
+    Error(message) -> panic as { "TEST_DATABASE_URL: " <> message }
+  }
+}
+
+fn empty(db: Repo) {
+  let assert Ok(tables) =
+    repo.all(
+      db,
+      "SELECT quote_ident(tablename) FROM pg_tables
+       WHERE schemaname = 'public' AND tablename <> 'schema_migrations'",
+      [],
+      decode.at([0], decode.string),
+    )
+  case tables {
+    [] -> Ok(0)
+    _ ->
+      repo.execute(
+        db,
+        "TRUNCATE " <> string.join(tables, ", ") <> " RESTART IDENTITY CASCADE",
+        [],
+      )
+  }
+}
+
+pub fn app(db: Repo) {
+  {{.Name}}.app(db)
+}
+
+/// Fixtures go through the same validator as requests.
+pub fn new_todo(title: String) -> todo_item.NewTodo {
+  let assert Ok(input) = todo_item.validate(todo_item.TodoInput(title:))
+  input
+}
+
+@external(erlang, "{{.Name}}_test_ffi", "cleanup")
+fn cleanup(after: fn() -> Nil, run: fn() -> a) -> a

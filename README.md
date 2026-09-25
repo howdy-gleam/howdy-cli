@@ -1,0 +1,192 @@
+# howdy CLI
+
+The command line for the [Howdy](https://github.com/mikeyjones/howdy) web framework, written in Go.
+
+```sh
+howdy new <project_name>
+```
+
+creates a Gleam project with a themed home page built from Howdy UI, static
+assets, hot reload for development (`gleam dev`), and a test suite. By
+default it also includes a SQLite database through Gloo with an example todo
+list: a migration, a `todos` slice (record, database operations, JSON API at
+`/api/todos`), and a live todo list on the home page rendered as a Lustre
+server component. Pass `--database postgres` for the same project on
+PostgreSQL: Gloo connects through a pog pool configured from `DATABASE_URL`,
+and the project gets a `docker-compose.yml` that starts PostgreSQL with a
+development and a test database. `--database sqlite` is the default, and
+`--no-database` gives a page-only project. The layout is a trimmed-down
+version of `howdy_example`.
+
+Every project is also set up for development with the rest of Howdy:
+
+- **Howdy Admin** (`howdy_admin`, a dev dependency) is mounted at `/_howdy`
+  by `dev/<project>_dev.gleam`, so it only runs under `gleam dev`. It
+  browses and edits the database and shows the recorded telemetry.
+- **Howdy Telemetry** (`howdy_telemetry`) records every request under
+  `gleam dev` for the admin, with the database Repo traced so each query is
+  a span. `gleam run` sends traces over OTLP when
+  `OTEL_EXPORTER_OTLP_ENDPOINT` is set, and records nothing otherwise.
+- **The console**: [GSH](https://hexdocs.pm/gsh/) is a dev dependency with
+  `[tools.gsh]` in `gleam.toml`, the app exposes its services through
+  `howdy/console`, and `src/console.gleam` holds shortcuts.
+  `gleam run -m gsh -- <project>_dev` starts the dev server inside a
+  console; the project README also shows how to attach to one that is
+  already running.
+
+Pass `--minimal` to leave all three out.
+
+Before writing anything it checks that `gleam` is installed (and warns if
+`erl` is missing), writes the files, formats them with `gleam format`,
+downloads dependencies,
+and prints what to do next. Progress is animated on a terminal; use
+`--plain` for line-by-line output, and `--skip-deps` to skip
+`gleam deps download`. Howdy, Howdy UI and Howdy Dev use Git dependencies
+from `https://github.com/mikeyjones/howdy.git`; Git must be installed to
+download them. No local Howdy checkout is needed.
+
+Projects depend on a Howdy release tag, never a branch, so every Howdy
+package in a project comes from the same release. By default that is the
+release this CLI's templates were written and tested against,
+`scaffold.Release` in `internal/scaffold/scaffold.go`. Pass `--howdy 2.1.0`
+to use another; a release the templates predate may need changes to the
+generated code. When a Howdy release changes what a project needs, update
+the templates and `scaffold.Release` together.
+
+Project names follow Gleam's rules: lowercase letters, digits and
+underscores, starting with a letter. A path such as `apps/my_site` is
+accepted; the last segment becomes the project name.
+
+## Adding a controller
+
+Inside a project with a database:
+
+```sh
+howdy create controller users user name:string age:int
+```
+
+creates the slice `src/<project>/users/`:
+
+| File | Holds |
+| --- | --- |
+| `user.gleam` | the `User` record, input validation, JSON codecs and the Gloo table |
+| `users.gleam` | the database operations: `all`, `find`, `create`, `update`, `delete` |
+| `users_controller.gleam` | the routes below |
+
+| Method | Route | Result |
+| --- | --- | --- |
+| GET | `/api/users` | every user |
+| GET | `/api/users/:id` | one user |
+| POST | `/api/users` | create; 201 |
+| PUT | `/api/users/:id` | replace every field; 200 |
+| DELETE | `/api/users/:id` | 204 |
+
+The first argument (plural) names the folder, table, routes and context
+module; the second (singular) names the record module and type. Fields are
+`name:type` with the types `string`, `int`, `float` and `bool`; a bare name
+is a string, and every record gets an integer `id`. The command also writes
+`migrations/create_users.gleam` with the next migration version and tests
+in `test/<project>/users/` (`users_test.gleam` for the database operations,
+`users_controller_test.gleam` for the routes), registers the controller
+in `src/<project>.gleam` and the migration in `platform/database.gleam`,
+and runs `gleam format`. If either of those two files no longer has the
+shape `howdy new` gave it, it is left alone and the command prints what to
+add by hand. Existing files are never overwritten. SQLite or PostgreSQL is
+detected from `gleam.toml` (PostgreSQL if it depends on pog).
+
+For pages that people use rather than a JSON API,
+
+```sh
+howdy create pages users user name:string age:int
+```
+
+takes the same arguments and writes `users_pages.gleam` in place of the
+controller, with its own test:
+
+| Method | Route | Page |
+| --- | --- | --- |
+| GET | `/users` | every user, in a table |
+| GET | `/users/new` | the form for a new user |
+| POST | `/users` | create, then show it |
+| GET | `/users/:id` | one user |
+| GET | `/users/:id/edit` | the form to change it |
+| POST | `/users/:id` | update, then show it |
+| POST | `/users/:id/delete` | delete, then back to the table |
+
+The pages are Howdy UI rendered on the server as plain links and forms, so
+they work without JavaScript (hence POST for update and delete). A form
+that fails validation comes back with its values and an error under each
+field. The layout, form reading and redirects live in
+`src/<project>/platform/pages.gleam` and the styles in
+`priv/public/assets/pages.css`; both are written the first time only and
+shared by every set of pages, so they are safe to edit. Pass `--api` to get
+the JSON controller as well.
+
+For data without a JSON API, reached from your own pages or other slices,
+
+```sh
+howdy create repo users user name:string email:string age:int
+```
+
+takes the same arguments and writes the same files except
+`users_controller.gleam` and its test, and only registers the migration.
+
+For only the table,
+
+```sh
+howdy create migration users name:string email:string age:int
+```
+
+writes `migrations/create_users.gleam` and adds it to the list in
+`platform/database.gleam`, and nothing else. It takes the table name alone,
+without the singular, so every field needs its type here.
+
+## Build
+
+Requires Go 1.25+.
+
+```sh
+go build -o howdy .
+./howdy new my_site
+```
+
+To install on your PATH:
+
+```sh
+go install .
+```
+
+## Layout
+
+```text
+main.go
+internal/
+├── cli/        cobra commands (root, new, create, dev)
+├── generate/   `howdy create controller`, `pages`, `repo` and `migration`: templates and registration
+├── scaffold/   project validation and template rendering
+│   └── templates/
+│       ├── base/      the page-only project, rendered with text/template
+│       ├── database/  files added or overridden when a database is included
+│       ├── postgres/  files overriding database/ for --database postgres
+│       └── full/      files only a project without --minimal has
+├── tools/      finding and running gleam / erl
+└── tui/        Bubble Tea step runner and styles
+```
+
+Templates mirror the generated project's layout. `__name__` in a path is
+replaced by the project name and a trailing `.tmpl` is dropped. The
+`database` set is rendered after `base` and wins for any path in both, and
+`postgres` is rendered after `database` in the same way. Files that differ
+by only a line or two between the databases stay in `database` and branch on
+`{{.Database}}` (`sqlite` or `postgres`) instead. The admin, telemetry and
+console are added to the shared files with `{{if .Full}}`, which is set
+unless `--minimal` is given; `full` only holds files no other set has. The
+published stylesheet `priv/public/assets/ui.css` is what `gleam run -m
+tasks/css` produces for the default themes; update it when Howdy UI's
+default styles change.
+
+## Test
+
+```sh
+go test ./...
+```

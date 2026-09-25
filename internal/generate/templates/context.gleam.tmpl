@@ -1,0 +1,81 @@
+//// The {{.Plural}} context: every database operation on {{.Plural}} lives here.
+
+import gleam/result
+import gloo/query
+import gloo/repo.{type Repo}
+import gloo/sql
+{{- if .Project.HowdyDatabase}}
+import howdy/database
+{{- end}}
+import howdy/service
+import {{.Project.Name}}/platform/errors
+import {{.Project.Name}}/{{.Plural}}/{{.Singular}}.{type New{{.Type}}, type {{.Type}}}
+
+pub fn all(db: Repo) -> service.Result(List({{.Type}})) {
+  query.from({{.Singular}}.table())
+  |> query.order_by("id", query.Asc)
+  |> repo.query_all(db, _)
+  |> result.map_error(errors.from_db)
+}
+
+pub fn find(db: Repo, id: Int) -> service.Result({{.Type}}) {
+  query.from({{.Singular}}.table())
+  |> query.where(query.Eq("id", sql.int(id)))
+  |> repo.query_one(db, _)
+  |> result.map_error(errors.from_db)
+}
+
+pub fn create(db: Repo, input: New{{.Type}}) -> service.Result({{.Type}}) {
+  query.insert(
+    query.from({{.Singular}}.table()),
+    {{.Singular}}.table(),
+    {{.Singular}}.values(input),
+  )
+  |> query.returning_columns({{.Singular}}.columns)
+  |> query.returning({{.Singular}}.table().decoder)
+  |> repo.query_one(db, _)
+  |> result.map_error(errors.from_db)
+}
+
+/// Replaces every field of the {{.Singular}}.
+pub fn update(db: Repo, id: Int, input: New{{.Type}}) -> service.Result({{.Type}}) {
+  query.from({{.Singular}}.table())
+  |> query.update({{.Singular}}.values(input))
+  |> query.where(query.Eq("id", sql.int(id)))
+  |> returning(db, _)
+}
+
+pub fn delete(db: Repo, id: Int) -> service.Result(Nil) {
+  query.from({{.Singular}}.table())
+  |> query.delete
+  |> query.where(query.Eq("id", sql.int(id)))
+  |> returning(db, _)
+  |> result.map(fn(_) { Nil })
+}
+
+{{if .Project.HowdyDatabase -}}
+// One statement writes or removes the row and reports it, so a missing row
+// is a 404 with nothing in between.
+fn returning(db: Repo, mutation: query.Query({{.Type}})) -> service.Result({{.Type}}) {
+  database.returning(
+    db,
+    mutation,
+    {{.Singular}}.columns,
+    or: service.NotFound("Record not found"),
+  )
+}
+{{- else -}}
+// Gloo only supports `returning_columns` for INSERT. Adding the clause to
+// the builder's SQL keeps the update or delete and its result atomic and
+// turns a missing row into a 404.
+fn returning(db: Repo, mutation: query.Query({{.Type}})) -> service.Result({{.Type}}) {
+  let #(statement, parameters) = query.to_sql(mutation)
+  repo.one(
+    db,
+    statement <> " RETURNING {{.Columns}}",
+    parameters,
+    query.decoder(mutation),
+  )
+  |> result.map_error(errors.from_db)
+}
+{{- end}}

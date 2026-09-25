@@ -1,0 +1,21 @@
+//// Version 1: the todos table. Add later migrations as new files here and
+//// register them in `platform/database.gleam`.
+
+import gloo/migration.{type Migration}
+import gloo/sqlite
+
+pub fn migration() -> Migration {
+  migration.create_table(
+    version: 1,
+    name: "create_todos",
+    table: "todos",
+    columns: [
+      sqlite.column("id", sqlite.Integer) |> sqlite.primary_key,
+      sqlite.column("title", sqlite.Text) |> sqlite.not_null,
+      sqlite.column("done", sqlite.Integer)
+        |> sqlite.not_null
+        |> sqlite.default("0"),
+    ],
+  )
+  |> migration.with_down("DROP TABLE IF EXISTS todos")
+}
