@@ -204,6 +204,42 @@ makes a page that renders through it. `--layout` works on `page`,
 default is used. A project made before layouts gets the default one the
 first time a command needs it.
 
+## Components
+
+A component is a piece of view that pages reuse: a `view()` function that
+returns an element.
+
+```sh
+howdy create component price_tag
+howdy create component blog post_card
+```
+
+With one name the component is global, in
+`src/<project>/components/price_tag_component.gleam`; with a controller
+first it belongs to that controller, in
+`src/<project>/blog/components/post_card_component.gleam`, and the
+controller must exist. Pages add `price_tag_component.view()` to their
+content.
+
+```sh
+howdy create live_component notifications
+howdy create live_component blog comments
+```
+
+writes a live component instead: a Lustre server component with its model,
+update and view, `app()` to start it, `socket(ctx)` to serve its WebSocket
+and `mount()` to put it on a page, which renders with its layout's
+`render_live`. The socket is routed for you: at
+`/blog/components/comments/live` in the blog controller, or for a global
+component at `/components/notifications/live` in
+`components/components_controller.gleam`, which the first global live
+component creates and registers in `src/<project>.gleam`. Either way the
+route goes ahead of any `/:id` route that would take it.
+
+Every component gets a test beside the others: that it renders, or for a
+live one that it mounts and its socket answers. A component that exists
+already is refused and nothing is written.
+
 ## Build
 
 Requires Go 1.25+.
@@ -225,7 +261,7 @@ go install .
 main.go
 internal/
 ├── cli/        cobra commands (root, new, create, dev)
-├── generate/   `howdy create controller`, `pages`, `repo`, `migration`, `page`, `live_page` and `layout`: templates and registration
+├── generate/   `howdy create controller`, `pages`, `repo`, `migration`, `page`, `live_page`, `layout`, `component` and `live_component`: templates and registration
 ├── scaffold/   project validation and template rendering
 │   └── templates/
 │       ├── base/      the page-only project, rendered with text/template

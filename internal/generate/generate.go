@@ -184,7 +184,7 @@ func NewSlice(p *Project, plural, singular string, fields []string) (*Slice, err
 // projectFolder refuses a name whose folder under src/<project>/ holds the
 // project's own code rather than a feature.
 func (p *Project) projectFolder(name string) error {
-	holds := map[string]string{"layouts": "layouts", "platform": "shared code", "migrations": "migrations"}[name]
+	holds := map[string]string{"layouts": "layouts", "platform": "shared code", "migrations": "migrations", "components": "global components"}[name]
 	if holds == "" {
 		return nil
 	}

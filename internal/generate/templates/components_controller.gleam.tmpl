@@ -1,0 +1,8 @@
+//// The WebSockets of the live components in this folder, under
+//// `/{{.Prefix}}`. `howdy create live_component <name>` adds each one here.
+
+import howdy/controller
+
+pub fn controller() {
+  controller.new("{{.Prefix}}")
+}

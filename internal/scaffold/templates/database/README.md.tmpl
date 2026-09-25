@@ -190,6 +190,15 @@ Pages that `howdy create page`, `live_page` and `pages` write use the
 default layout, or another one with `--layout <name>`, and
 `howdy create layout <name>` makes a new one to change.
 
+## Components
+
+Pieces of view that pages reuse live in `src/{{.Name}}/components/`, or in
+a controller's own `components/` folder when only its pages use them.
+`howdy create component [controller] <name>` writes one with a `view()` to
+add to a page's content. `howdy create live_component [controller] <name>`
+writes a Lustre server component and routes its WebSocket; put it on a page
+with its `mount()`, in a page that renders with `render_live`.
+
 ## Styles
 
 During `gleam dev` the Howdy UI stylesheet is generated on request. For

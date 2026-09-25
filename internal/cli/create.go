@@ -23,7 +23,131 @@ func createCommand() *cobra.Command {
 	cmd.AddCommand(createPageCommand(false))
 	cmd.AddCommand(createPageCommand(true))
 	cmd.AddCommand(createLayoutCommand())
+	cmd.AddCommand(createComponentCommand(false))
+	cmd.AddCommand(createComponentCommand(true))
 	return cmd
+}
+
+func createComponentCommand(live bool) *cobra.Command {
+	var plain bool
+	cmd := &cobra.Command{
+		Use:   "component [controller] <name>",
+		Short: "Create a component, a piece of view to reuse on pages",
+		Long: `Create a component: a view function that returns an element, for pages to
+reuse. With one name it is global, in src/<project>/components/; with a
+controller first it belongs to that controller, in
+src/<project>/<controller>/components/. The module is <name>_component.gleam
+and pages call <name>_component.view(). The controller must exist.
+
+A component that already exists is refused and nothing is written. A test
+that it renders is written beside the other tests.`,
+		Example: "  howdy create component price_tag\n  howdy create component blog post_card",
+		Args:    cobra.RangeArgs(1, 2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			controller, name := "", args[0]
+			if len(args) == 2 {
+				controller, name = args[0], args[1]
+			}
+			return runCreateComponent(controller, name, live, plain)
+		},
+	}
+	if live {
+		cmd.Use = "live_component [controller] <name>"
+		cmd.Short = "Create a live component, a Lustre server component to put on pages"
+		cmd.Long = `Create a live component: a Lustre server component whose model, update and
+view run on the server, with the browser showing each change it sends over
+a WebSocket. With one name it is global, in src/<project>/components/; with
+a controller first it belongs to that controller, in
+src/<project>/<controller>/components/. The controller must exist.
+
+The module is <name>_component.gleam. Pages put it on the page with
+<name>_component.mount(), and render with their layout's render_live, which
+loads the script it connects with. Its WebSocket is routed for you: in the
+controller at /<controller>/components/<name>/live, or for a global
+component at /components/<name>/live, in components/components_controller.gleam,
+which the first global live component creates and registers in
+src/<project>.gleam.
+
+A component that already exists is refused and nothing is written. A test
+that it mounts and serves its socket is written beside the other tests.`
+		cmd.Example = "  howdy create live_component notifications\n  howdy create live_component blog comments"
+	}
+	cmd.Flags().BoolVar(&plain, "plain", false, "print progress as plain lines instead of animating")
+	return cmd
+}
+
+func runCreateComponent(controller, name string, live, plain bool) error {
+	dir, err := findProjectDir()
+	if err != nil {
+		return err
+	}
+	project, err := generate.Open(dir)
+	if err != nil {
+		return err
+	}
+	component, err := generate.NewComponent(project, controller, name, live)
+	if err != nil {
+		return err
+	}
+
+	var notes []string
+	steps := []tui.Step{
+		{
+			Title: "Creating files",
+			Run: func(r tui.Reporter) (string, error) {
+				written, err := component.Write()
+				for _, path := range written {
+					r.Log(path)
+				}
+				if err != nil {
+					return "", err
+				}
+				return fmt.Sprintf("%d files", len(written)), nil
+			},
+		},
+	}
+	if live {
+		steps = append(steps, tui.Step{
+			Title: "Routing its socket",
+			Run: func(r tui.Reporter) (string, error) {
+				notes = component.Register()
+				if len(notes) > 0 {
+					return "needs a hand, see below", nil
+				}
+				return component.ControllerFile(), nil
+			},
+		})
+	}
+	steps = append(steps, tui.Step{
+		Title: "Formatting Gleam sources",
+		Run: func(r tui.Reporter) (string, error) {
+			gleam, err := tools.FindGleam()
+			if err != nil {
+				r.Warn("gleam was not found on PATH; run 'gleam format' yourself.")
+				return "skipped", nil
+			}
+			return "gleam format", gleam.Run(dir, "format", "src", "test")
+		},
+	})
+	kind := "component"
+	if live {
+		kind = "live_component"
+	}
+	title := strings.TrimSpace(fmt.Sprintf("howdy create %s %s %s", kind, controller, component.Name))
+	if err := tui.Run(strings.Join(strings.Fields(title), " "), steps, plain); err != nil {
+		return err
+	}
+
+	use := fmt.Sprintf("Use it in a page: import %s and add %s.view() to the page's content.", component.Import(), component.Module())
+	if live {
+		use = fmt.Sprintf("Put it on a page: import %s, add %s.mount() to the content, and render the page with render_live.", component.Import(), component.Module())
+		notes = append(notes, fmt.Sprintf("Its socket is at %s, routed in %s.", component.URL(), component.ControllerFile()))
+	}
+	notes = append([]string{fmt.Sprintf("Build the component in %s.", component.File()), use}, notes...)
+	fmt.Print(tui.NextSteps(component.Module(), []tui.Command{
+		{Cmd: "gleam test", Note: "run the tests, including the new one for the component"},
+	}, notes))
+	return nil
 }
 
 func createLayoutCommand() *cobra.Command {

@@ -1,0 +1,34 @@
+import gleam/string
+{{- if .Live}}
+import howdy/testing
+{{- end}}
+import lustre/element
+{{- if and .Live .HasDatabase}}
+import {{.Project.Name}}/support
+{{- else if .Live}}
+import {{.Project.Name}}
+{{- end}}
+import {{.Import}}
+{{- if .Live}}
+
+pub fn {{.Module}}_mounts_its_socket_test() {
+  let html = element.to_string({{.Module}}.mount())
+  assert string.contains(html, "{{.URL}}")
+}
+
+pub fn {{.Module}}_socket_requires_websocket_test() {
+{{- if .HasDatabase}}
+  use db <- support.with_db()
+  let res = testing.get("{{.URL}}") |> testing.send(support.app(db))
+{{- else}}
+  let res = testing.get("{{.URL}}") |> testing.send({{.Project.Name}}.app())
+{{- end}}
+  assert res.status == 426
+}
+{{- else}}
+
+pub fn {{.Module}}_renders_test() {
+  let html = element.to_string({{.Module}}.view())
+  assert string.contains(html, "The {{.Title}} component")
+}
+{{- end}}

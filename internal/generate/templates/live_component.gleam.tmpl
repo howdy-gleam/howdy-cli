@@ -1,0 +1,64 @@
+//// The {{.Title}} component, live: a Lustre server component. Its model,
+//// update and view run on the server, and the browser renders the changes
+//// it receives over a WebSocket at `{{.URL}}`. Every tab gets its own copy.
+////
+//// Put it on a page with `{{.Module}}.mount()`, in a page that renders with
+//// its layout's `render_live`, which loads the script it connects with.
+
+import gleam/int
+import howdy/controller.{type Context}
+import howdy/ui
+import howdy/ui/button
+import howdy/ui/live
+import lustre
+import lustre/component
+import lustre/effect
+import lustre/element.{type Element, text}
+import lustre/event
+
+/// The component's place on a page.
+pub fn mount() -> Element(msg) {
+  live.mount("{{.URL}}")
+}
+
+/// The WebSocket the component connects to, routed in
+/// `{{.ControllerFile}}`.
+pub fn socket(ctx: Context) {
+  live.serve(ctx, app(), with: Nil)
+}
+
+pub type Model {
+  Model(clicks: Int)
+}
+
+pub type Msg {
+  Clicked
+}
+
+pub fn app() -> lustre.App(Nil, Model, Msg) {
+  lustre.component(
+    init,
+    fn(model, msg) { #(update(model, msg), effect.none()) },
+    view,
+    [component.open_shadow_root(True), component.adopt_styles(True)],
+  )
+}
+
+fn init(_flags: Nil) -> #(Model, effect.Effect(Msg)) {
+  #(Model(clicks: 0), effect.none())
+}
+
+fn update(model: Model, msg: Msg) -> Model {
+  case msg {
+    Clicked -> Model(clicks: model.clicks + 1)
+  }
+}
+
+fn view(model: Model) -> Element(Msg) {
+  ui.card([], [
+    ui.p([text("The {{.Title}} component, in {{.File}}.")]),
+    ui.button(button.Primary, [event.on_click(Clicked)], [
+      text("Clicked " <> int.to_string(model.clicks) <> " times"),
+    ]),
+  ])
+}

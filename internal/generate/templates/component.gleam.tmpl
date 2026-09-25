@@ -1,0 +1,10 @@
+//// The {{.Title}} component: a piece of view to reuse{{if .Controller}} across the {{.Controller}} pages{{else}} on any page{{end}}.
+//// Use it in a page's content with `{{.Module}}.view()`, and give `view`
+//// the arguments it needs, such as `title: String`.
+
+import howdy/ui
+import lustre/element.{type Element, text}
+
+pub fn view() -> Element(msg) {
+  ui.card([], [ui.p([text("The {{.Title}} component, in {{.File}}.")])])
+}
