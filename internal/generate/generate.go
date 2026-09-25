@@ -92,6 +92,8 @@ type Slice struct {
 	Pages bool
 	// MigrationOnly leaves out everything but the migration.
 	MigrationOnly bool
+	// Layout names the layout the pages render through, "" for the default.
+	Layout string
 	// Version is the migration version, one above the highest in the project.
 	Version int
 }
@@ -115,8 +117,8 @@ var sqlKeywords = words(`
 // Modules the generated code imports, which a slice module of the same name
 // would clash with, and the variable the templates use for a record.
 var moduleNames = words(`
-	body controller database decode errors howdy int item json migration param query
-	repo result schema service sql support testing validate value`)
+	body controller database decode errors helpers howdy int item json migration pages
+	param query repo result schema service sql support testing validate value`)
 
 // Variables and the column the templates define themselves.
 var fieldNames = words(`ctx db errors form id input item items path`)
@@ -165,6 +167,9 @@ func NewSlice(p *Project, plural, singular string, fields []string) (*Slice, err
 			return nil, fmt.Errorf("%q would clash with a module the generated code imports; pick another name", name)
 		}
 	}
+	if err := p.projectFolder(plural); err != nil {
+		return nil, err
+	}
 	if reservedTypes[pascal(singular)] {
 		return nil, fmt.Errorf("%q would shadow Gleam's %s type; pick another name", singular, pascal(singular))
 	}
@@ -174,6 +179,16 @@ func NewSlice(p *Project, plural, singular string, fields []string) (*Slice, err
 	}
 	c.Singular, c.Type = singular, pascal(singular)
 	return c, nil
+}
+
+// projectFolder refuses a name whose folder under src/<project>/ holds the
+// project's own code rather than a feature.
+func (p *Project) projectFolder(name string) error {
+	holds := map[string]string{"layouts": "layouts", "platform": "shared code", "migrations": "migrations"}[name]
+	if holds == "" {
+		return nil
+	}
+	return fmt.Errorf("src/%s/%s/ holds the project's %s; pick another name", p.Name, name, holds)
 }
 
 func invalidName(name string) error {
@@ -279,10 +294,15 @@ func (c *Slice) Files() ([]File, error) {
 		targets = append(targets, target{template: "controller.gleam.tmpl", path: filepath.Join(slice, c.ControllerModule()+".gleam")})
 	}
 	if c.Pages {
+		pages := filepath.Join(slice, "pages")
 		targets = append(targets,
-			target{template: "pages.gleam.tmpl", path: filepath.Join(slice, c.PagesModule()+".gleam")},
+			target{template: "pages_controller.gleam.tmpl", path: filepath.Join(slice, c.PagesModule()+".gleam")},
+			target{template: "slice_helpers.gleam.tmpl", path: filepath.Join(pages, "helpers.gleam")},
+			target{template: "index_page.gleam.tmpl", path: filepath.Join(pages, "index_page.gleam")},
+			target{template: "show_page.gleam.tmpl", path: filepath.Join(pages, "show_page.gleam")},
+			target{template: "new_page.gleam.tmpl", path: filepath.Join(pages, "new_page.gleam")},
+			target{template: "edit_page.gleam.tmpl", path: filepath.Join(pages, "edit_page.gleam")},
 			target{"pages_helpers.gleam.tmpl", filepath.Join("src", p.Name, "platform", "pages.gleam"), true},
-			target{"pages.css.tmpl", filepath.Join("priv", "public", "assets", "pages.css"), true},
 		)
 	}
 	if _, err := os.Stat(filepath.Join(p.Dir, "test", p.Name, "support.gleam")); err == nil && !c.MigrationOnly {
@@ -307,47 +327,48 @@ func (c *Slice) Files() ([]File, error) {
 		}
 		files = append(files, File{Path: t.path, Content: out.Bytes(), Shared: t.shared})
 	}
+	if c.Pages && !c.MigrationOnly {
+		// platform/pages.gleam renders its error page through it.
+		layout, err := p.defaultLayout()
+		if err != nil {
+			return nil, err
+		}
+		files = append(files, layout)
+	}
 	return files, nil
 }
 
 // Write creates the files, refusing to replace any that exist, except that
-// shared files already in the project are kept. It returns the paths written.
+// shared files already in the project are kept, and adds the pages' styles
+// to style.css if it does not have them. It returns the paths written.
 func (c *Slice) Write() ([]string, error) {
 	files, err := c.Files()
 	if err != nil {
 		return nil, err
 	}
-	exists := map[string]bool{}
-	for _, f := range files {
-		if _, err := os.Stat(filepath.Join(c.Project.Dir, f.Path)); err == nil {
-			if !f.Shared {
-				return nil, fmt.Errorf("%s already exists; nothing was written", f.Path)
-			}
-			exists[f.Path] = true
-		}
+	written, err := writeFiles(c.Project.Dir, files)
+	if err != nil || !c.Pages {
+		return written, err
 	}
-	var written []string
-	for _, f := range files {
-		if exists[f.Path] {
-			continue
-		}
-		target := filepath.Join(c.Project.Dir, f.Path)
-		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-			return written, err
-		}
-		if err := os.WriteFile(target, f.Content, 0o644); err != nil {
-			return written, err
-		}
-		written = append(written, f.Path)
+	changed, err := c.Project.pageStyles()
+	if changed {
+		written = append(written, "priv/public/assets/style.css")
 	}
-	return written, nil
+	return written, err
 }
 
 // MigrationModule is the migration's module name, e.g. "create_users".
 func (c *Slice) MigrationModule() string { return "create_" + c.Plural }
 
-// ControllerModule is the controller's module name, e.g. "users_controller".
-func (c *Slice) ControllerModule() string { return c.Plural + "_controller" }
+// ControllerModule is the JSON controller's module name, e.g.
+// "users_controller", or "users_api_controller" beside the pages, whose
+// controller has the plain name.
+func (c *Slice) ControllerModule() string {
+	if c.Pages {
+		return c.Plural + "_api_controller"
+	}
+	return c.Plural + "_controller"
+}
 
 // Postgres reports whether the project uses PostgreSQL rather than SQLite.
 func (c *Slice) Postgres() bool { return c.Project.Database == "postgres" }
@@ -387,8 +408,18 @@ func (c *Slice) FirstString() *Field {
 	return nil
 }
 
-// PagesModule is the HTML controller's module name, e.g. "users_pages".
-func (c *Slice) PagesModule() string { return c.Plural + "_pages" }
+// LayoutModule is the module name of the pages' layout, e.g. "default_layout".
+func (c *Slice) LayoutModule() string {
+	if c.Layout == "" {
+		return DefaultLayout + "_layout"
+	}
+	return c.Layout + "_layout"
+}
+
+// PagesModule is the module name of the controller for the HTML pages,
+// e.g. "users_controller", so 'howdy create page users <name>' adds to it.
+// The pages themselves are in the slice's pages folder.
+func (c *Slice) PagesModule() string { return c.Plural + "_controller" }
 
 // Title, SingularTitle, Label and PluralLabel name the slice for people:
 // "Blog posts", "Blog post", "blog post" and "blog posts".

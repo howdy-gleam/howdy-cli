@@ -1,0 +1,59 @@
+//// What the {{.Plural}} pages and their controller share: where a
+//// {{.Singular}} lives, and the form that creates and edits one. The
+//// layout and form helpers every set of pages uses are in
+//// `platform/pages.gleam`.
+{{if .HasKind "float"}}
+import gleam/float
+{{- end}}
+import gleam/int
+import howdy/service
+import howdy/validate
+{{- if .HasNonBool}}
+import lustre/attribute as a
+{{- end}}
+import lustre/element.{type Element}
+import {{.Project.Name}}/platform/pages
+import {{.Project.Name}}/{{.Plural}}/{{.Singular}}.{type New{{.Type}}, type {{.Type}}}
+
+/// The page that shows a {{.Singular}}.
+pub fn path(item: {{.Type}}) -> String {
+  "/{{.Plural}}/" <> int.to_string(item.id)
+}
+
+/// A submitted form as a validated {{.Singular}}, or the errors to show.
+pub fn parse(form: pages.Form) -> validate.Result(New{{.Type}}) {
+{{- range .Fields}}
+  {{.FormParse}}
+{{- end}}
+  {{.Singular}}.validate({{.Singular}}.{{.Type}}Input({{range $i, $f := .Fields}}{{if $i}}, {{end}}{{$f.Name}}:{{end}}))
+}
+
+/// The edit form starts from the stored {{.Singular}}.
+pub fn to_form(item: {{.Type}}) -> pages.Form {
+  [
+{{- range .Fields}}
+    #("{{.Name}}", {{.FormValue "item"}}),
+{{- end}}
+  ]
+}
+
+/// The inputs of the new and edit forms, with any errors under them.
+pub fn fields(
+  form: pages.Form,
+  {{.ErrorsArg}}: List(service.FieldError),
+) -> List(Element(msg)) {
+  [
+{{- range .Fields}}
+    {{.FormInput}},
+{{- end}}
+  ]
+}
+{{- if .HasKind "bool"}}
+
+pub fn yes_no(value: Bool) -> String {
+  case value {
+    True -> "Yes"
+    False -> "No"
+  }
+}
+{{- end}}

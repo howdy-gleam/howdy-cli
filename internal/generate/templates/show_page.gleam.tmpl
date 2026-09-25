@@ -1,0 +1,36 @@
+//// One {{.Singular}}, at `/{{.Plural}}/:id`.
+{{if .HasKind "float"}}
+import gleam/float
+{{- end}}
+import gleam/int
+import howdy/controller.{type Context}
+import howdy/ui
+import howdy/ui/button
+import lustre/attribute as a
+import lustre/element.{text}
+import lustre/element/html as h
+import {{.Project.Name}}/layouts/{{.LayoutModule}}
+import {{.Project.Name}}/platform/pages
+import {{.Project.Name}}/{{.Plural}}/pages/helpers
+import {{.Project.Name}}/{{.Plural}}/{{.Singular}}.{type {{.Type}}}
+
+pub fn show(ctx: Context, item: {{.Type}}) {
+  let path = helpers.path(item)
+  let title = "{{.SingularTitle}} " <> int.to_string(item.id)
+  {{.LayoutModule}}.render(ctx, title, [
+    ui.h1(title),
+    ui.card([], [
+      h.dl([a.class("page-details")], [
+{{- range .Fields}}
+        h.dt([], [text("{{.Label}}")]),
+        h.dd([], [text({{.Display "item"}})]),
+{{- end}}
+      ]),
+    ]),
+    h.div([a.class("page-buttons")], [
+      pages.button_link(button.Primary, path <> "/edit", "Edit"),
+      pages.action(button.Danger, to: path <> "/delete", label: "Delete"),
+      ui.link("/{{.Plural}}", [text("Back to {{.PluralLabel}}")]),
+    ]),
+  ])
+}

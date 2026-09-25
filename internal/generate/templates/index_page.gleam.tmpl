@@ -1,0 +1,55 @@
+//// Every {{.Singular}}, in a table, at `/{{.Plural}}`.
+{{if .HasKind "float"}}
+import gleam/float
+{{- end}}
+{{- if .HasKind "int"}}
+import gleam/int
+{{- end}}
+import gleam/list
+import howdy/controller.{type Context}
+import howdy/ui
+import howdy/ui/button
+import lustre/attribute as a
+import lustre/element.{type Element, text}
+import lustre/element/html as h
+import {{.Project.Name}}/layouts/{{.LayoutModule}}
+import {{.Project.Name}}/platform/pages
+import {{.Project.Name}}/{{.Plural}}/pages/helpers
+import {{.Project.Name}}/{{.Plural}}/{{.Singular}}.{type {{.Type}}}
+
+pub fn show(ctx: Context, items: List({{.Type}})) {
+  {{.LayoutModule}}.render(ctx, "{{.Title}}", [
+    ui.h1("{{.Title}}"),
+    ui.row([], [pages.button_link(button.Primary, "/{{.Plural}}/new", "New {{.Label}}")]),
+    ui.card([], [
+      case items {
+        [] -> ui.p([ui.muted("Nothing here yet.")])
+        _ ->
+          h.table([a.class("page-table")], [
+            h.thead([], [
+              h.tr([], [
+{{- range .Fields}}
+                h.th([], [text("{{.Label}}")]),
+{{- end}}
+                h.th([], []),
+              ]),
+            ]),
+            h.tbody([], list.map(items, row)),
+          ])
+      },
+    ]),
+  ])
+}
+
+fn row(item: {{.Type}}) -> Element(msg) {
+  h.tr([], [
+{{- range .Fields}}
+    h.td([], [text({{.Display "item"}})]),
+{{- end}}
+    h.td([a.class("page-actions")], [
+      ui.link(helpers.path(item), [text("Show")]),
+      text(" · "),
+      ui.link(helpers.path(item) <> "/edit", [text("Edit")]),
+    ]),
+  ])
+}

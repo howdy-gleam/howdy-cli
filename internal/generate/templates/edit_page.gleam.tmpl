@@ -1,0 +1,38 @@
+//// The form to change a {{.Singular}}, at `/{{.Plural}}/:id/edit`. It is
+//// shown again with the errors when what was submitted is not valid.
+
+import gleam/int
+import gleam/list
+import howdy/controller.{type Context}
+import howdy/service
+import howdy/ui
+import howdy/ui/button
+import lustre/attribute as a
+import lustre/element.{text}
+import lustre/element/html as h
+import {{.Project.Name}}/layouts/{{.LayoutModule}}
+import {{.Project.Name}}/platform/pages
+import {{.Project.Name}}/{{.Plural}}/pages/helpers
+
+pub fn show(
+  ctx: Context,
+  id: Int,
+  form: pages.Form,
+  errors: List(service.FieldError),
+) {
+  let path = "/{{.Plural}}/" <> int.to_string(id)
+  {{.LayoutModule}}.render(ctx, "Edit {{.Label}}", [
+    ui.h1("Edit {{.Label}}"),
+    ui.card([], [
+      h.form(
+        [a.method("post"), a.action(path), a.class("page-form")],
+        list.append(helpers.fields(form, errors), [
+          h.div([a.class("page-buttons")], [
+            pages.submit(button.Primary, "Save"),
+            ui.link(path, [text("Cancel")]),
+          ]),
+        ]),
+      ),
+    ]),
+  ])
+}

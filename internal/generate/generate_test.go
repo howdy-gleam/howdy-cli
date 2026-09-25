@@ -230,20 +230,25 @@ func TestPages(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(written) != 8 {
+	if len(written) != 13 {
 		t.Errorf("wrote %v", written)
 	}
 	if notes := c.Register(); len(notes) != 0 {
 		t.Errorf("registration needed a hand: %v", notes)
 	}
 	for path, want := range map[string]string{
-		"src/demo_site/blog_posts/blog_posts_pages.gleam":       `controller.new("blog_posts")`,
-		"src/demo_site/platform/pages.gleam":                    "pub fn read_form(",
-		"priv/public/assets/pages.css":                          ".page-table",
-		"test/demo_site/blog_posts/blog_posts_pages_test.gleam": `#("title", "First title"), #("views", "1"), #("rating", "1.5")`,
-		"src/demo_site.gleam":                                   "|> howdy.controller(blog_posts_pages.controller(db))",
+		"src/demo_site/blog_posts/blog_posts_controller.gleam":       `controller.new("blog_posts")`,
+		"src/demo_site/blog_posts/pages/index_page.gleam":            `helpers.yes_no(item.published)`,
+		"src/demo_site/blog_posts/pages/show_page.gleam":             `"Back to blog posts"`,
+		"src/demo_site/blog_posts/pages/new_page.gleam":              `"New blog post"`,
+		"src/demo_site/blog_posts/pages/edit_page.gleam":             `"Edit blog post"`,
+		"src/demo_site/platform/pages.gleam":                         "pub fn read_form(",
+		"priv/public/assets/style.css":                               ".page-table",
+		"src/demo_site/platform/pages.gleam#":                        "default_layout.render(ctx, \"Something went wrong\"",
+		"test/demo_site/blog_posts/blog_posts_controller_test.gleam": `#("title", "First title"), #("views", "1"), #("rating", "1.5")`,
+		"src/demo_site.gleam":                                        "|> howdy.controller(blog_posts_controller.controller(db))",
 	} {
-		content := read(t, p, path)
+		content := read(t, p, strings.TrimSuffix(path, "#"))
 		if !strings.Contains(content, want) {
 			t.Errorf("%s should contain %q", path, want)
 		}
@@ -251,25 +256,25 @@ func TestPages(t *testing.T) {
 			t.Errorf("unrendered template markers in %s", path)
 		}
 	}
-	page := read(t, p, "src/demo_site/blog_posts/blog_posts_pages.gleam")
+	helpers := read(t, p, "src/demo_site/blog_posts/pages/helpers.gleam")
 	for _, want := range []string{
 		`use views <- pages.whole_number(form, "views")`,
 		`use rating <- pages.number(form, "rating")`,
 		`let published = pages.checked(form, "published")`,
 		`pages.checkbox(form, "published", "Published")`,
-		`"New blog post"`, `"Back to blog posts"`,
+		`pub fn yes_no(`,
 	} {
-		if !strings.Contains(page, want) {
-			t.Errorf("pages should contain %q", want)
+		if !strings.Contains(helpers, want) {
+			t.Errorf("the pages' helpers should contain %q", want)
 		}
 	}
-	if strings.Contains(read(t, p, "src/demo_site.gleam"), "blog_posts_controller") {
+	if strings.Contains(read(t, p, "src/demo_site.gleam"), "blog_posts_api_controller") {
 		t.Error("pages alone should not register a JSON controller")
 	}
 
 	// A second set of pages keeps the shared helpers, which may have been edited.
-	helpers := filepath.Join(p.Dir, "src", "demo_site", "platform", "pages.gleam")
-	os.WriteFile(helpers, []byte("// mine\n"), 0o644)
+	shared := filepath.Join(p.Dir, "src", "demo_site", "platform", "pages.gleam")
+	os.WriteFile(shared, []byte("// mine\n"), 0o644)
 	c2, err := NewSlice(p, "users", "user", []string{"admin:bool"})
 	if err != nil {
 		t.Fatal(err)
@@ -279,13 +284,13 @@ func TestPages(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(written) != 6 {
+	if len(written) != 11 {
 		t.Errorf("wrote %v", written)
 	}
-	if got, _ := os.ReadFile(helpers); string(got) != "// mine\n" {
+	if got, _ := os.ReadFile(shared); string(got) != "// mine\n" {
 		t.Error("existing shared helpers should be kept")
 	}
-	if !strings.Contains(read(t, p, "src/demo_site/users/users_pages.gleam"), "_errors: List(service.FieldError)") {
+	if !strings.Contains(read(t, p, "src/demo_site/users/pages/helpers.gleam"), "_errors: List(service.FieldError)") {
 		t.Error("checkbox-only pages should not leave errors unused")
 	}
 }

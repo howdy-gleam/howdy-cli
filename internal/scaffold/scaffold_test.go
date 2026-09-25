@@ -58,7 +58,7 @@ func TestWriteRendersProject(t *testing.T) {
 
 	want := []string{
 		"gleam.toml", "README.md", ".gitignore", ".env.example",
-		"src/demo_site.gleam", "src/demo_site/site/site_controller.gleam",
+		"src/demo_site.gleam", "src/demo_site/site/site_controller.gleam", "src/demo_site/layouts/default_layout.gleam",
 		"src/tasks/css.gleam", "dev/demo_site_dev.gleam",
 		"test/demo_site_test.gleam", "test/demo_site/site/site_controller_test.gleam",
 		"priv/public/assets/style.css", "priv/public/assets/ui.css",

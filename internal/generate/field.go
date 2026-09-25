@@ -169,10 +169,11 @@ func (f Field) FormValue(record string) string {
 	return v
 }
 
-// Display is the field of record as text on a page.
+// Display is the field of record as text on a page, which imports the
+// pages' helpers module.
 func (f Field) Display(record string) string {
 	if f.Kind == Bool {
-		return "yes_no(" + record + "." + f.Name + ")"
+		return "helpers.yes_no(" + record + "." + f.Name + ")"
 	}
 	return f.FormValue(record)
 }

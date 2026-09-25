@@ -118,6 +118,8 @@ src/
 ├── console.gleam             # console shortcuts
 {{- end}}
 ├── {{.Name}}/
+│   ├── layouts/
+│   │   └── default_layout.gleam   # what every page is rendered inside
 │   └── site/
 │       └── site_controller.gleam  # the home page
 └── tasks/
@@ -133,6 +135,23 @@ test/
 
 Group new features by folder under `src/{{.Name}}/`, each with its own
 controller, and register the controller in `src/{{.Name}}.gleam`.
+
+## Layouts
+
+Everything around a page's content, from the HTML document with the theme
+and stylesheets to the header, comes from a layout in
+`src/{{.Name}}/layouts/`. The home page uses `default_layout.gleam`:
+
+```gleam
+default_layout.render(ctx, "About", [ui.h1("About"), ui.p([text("...")])])
+```
+
+Call `render_live` instead for a page with live sections (`live.mount`): it
+also loads the script they connect with, which other pages leave out.
+
+Pages that `howdy create page`, `live_page` and `pages` write use the
+default layout, or another one with `--layout <name>`, and
+`howdy create layout <name>` makes a new one to change.
 
 ## Styles
 

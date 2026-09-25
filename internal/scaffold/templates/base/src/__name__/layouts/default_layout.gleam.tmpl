@@ -1,0 +1,63 @@
+//// The {{.Layout}} layout: everything around a page's content, so pages
+//// only build what is theirs. Call `render` for a plain page, or
+//// `render_live` for one with live sections (`live.mount`), which also
+//// loads the script they connect with.
+////
+//// Pages choose a layout by importing it. `howdy create layout <name>`
+//// makes another, and `--layout <name>` makes `howdy create page` use it.
+
+import howdy/controller.{type GuardedContext}
+import howdy/cookie
+import howdy/ui
+import howdy/ui/page
+import lustre/attribute as a
+import lustre/element.{type Element, text}
+import lustre/element/html as h
+
+pub fn render(
+  ctx: GuardedContext(guarded),
+  title: String,
+  content: List(Element(msg)),
+) {
+  build(ctx, title, content, live: False)
+}
+
+pub fn render_live(
+  ctx: GuardedContext(guarded),
+  title: String,
+  content: List(Element(msg)),
+) {
+  build(ctx, title, content, live: True)
+}
+
+fn build(
+  ctx: GuardedContext(guarded),
+  title: String,
+  content: List(Element(msg)),
+  live live: Bool,
+) {
+  // The theme toggle stores the choice in a cookie; "system" follows the OS.
+  use theme <- cookie.string_or(ctx, "theme", default: "system")
+
+  let document =
+    page.new(title)
+    |> page.theme(theme)
+    |> page.stylesheet(at: "/assets/ui.css")
+    |> page.head([
+      h.link([a.rel("icon"), a.href("data:,")]),
+      h.link([a.rel("stylesheet"), a.href("/assets/style.css")]),
+    ])
+  case live {
+    True -> page.live(document)
+    False -> document
+  }
+  |> page.body([ui.container([], [ui.stack([], [header(), ..content])])])
+  |> page.respond(ctx)
+}
+
+fn header() -> Element(msg) {
+  h.header([a.class("site-header")], [
+    ui.link("/", [text("{{.Title}}")]),
+    ui.theme_toggle([text("Toggle theme")], from: "light", to: "dark"),
+  ])
+}

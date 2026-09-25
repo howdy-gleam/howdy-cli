@@ -1,0 +1,85 @@
+//// The HTML pages for {{.Plural}}: their routes, and what each does with a
+//// submitted form. The pages themselves are in `pages/`, as plain links and
+//// forms that work without JavaScript.
+////
+//// | Method | Route | Page |
+//// | --- | --- | --- |
+//// | GET | `/{{.Plural}}` | Every {{.Singular}}, in a table |
+//// | GET | `/{{.Plural}}/new` | The form for a new {{.Singular}} |
+//// | POST | `/{{.Plural}}` | Create, then show it |
+//// | GET | `/{{.Plural}}/:id` | One {{.Singular}} |
+//// | GET | `/{{.Plural}}/:id/edit` | The form to change it |
+//// | POST | `/{{.Plural}}/:id` | Update, then show it |
+//// | POST | `/{{.Plural}}/:id/delete` | Delete, then back to the table |
+////
+//// HTML forms can only GET and POST, hence POST for update and delete.
+//// Add another page with `howdy create page {{.Plural}} <name>`.
+
+import gloo/repo.{type Repo}
+import howdy/controller
+import howdy/param
+import {{.Project.Name}}/platform/pages
+import {{.Project.Name}}/{{.Plural}}/pages/edit_page
+import {{.Project.Name}}/{{.Plural}}/pages/helpers
+import {{.Project.Name}}/{{.Plural}}/pages/index_page
+import {{.Project.Name}}/{{.Plural}}/pages/new_page
+import {{.Project.Name}}/{{.Plural}}/pages/show_page
+import {{.Project.Name}}/{{.Plural}}/{{.Plural}}
+
+pub fn controller(db: Repo) {
+  controller.new("{{.Plural}}")
+  |> controller.get("/", fn(ctx) {
+    case {{.Plural}}.all(db) {
+      Ok(items) -> index_page.show(ctx, items)
+      Error(error) -> pages.error(ctx, error)
+    }
+  })
+  // Before "/:id", which would otherwise match "new".
+  |> controller.get("/new", fn(ctx) { new_page.show(ctx, [], []) })
+  |> controller.post("/", fn(ctx) {
+    use form <- pages.read_form(ctx)
+    case helpers.parse(form) {
+      Error(errors) ->
+        new_page.show(ctx, form, errors) |> controller.with_status(422)
+      Ok(input) ->
+        case {{.Plural}}.create(db, input) {
+          Ok(item) -> pages.redirect(ctx, to: helpers.path(item))
+          Error(error) -> pages.error(ctx, error)
+        }
+    }
+  })
+  |> controller.get("/:id", fn(ctx) {
+    use id <- param.int(ctx, "id")
+    case {{.Plural}}.find(db, id) {
+      Ok(item) -> show_page.show(ctx, item)
+      Error(error) -> pages.error(ctx, error)
+    }
+  })
+  |> controller.get("/:id/edit", fn(ctx) {
+    use id <- param.int(ctx, "id")
+    case {{.Plural}}.find(db, id) {
+      Ok(item) -> edit_page.show(ctx, id, helpers.to_form(item), [])
+      Error(error) -> pages.error(ctx, error)
+    }
+  })
+  |> controller.post("/:id", fn(ctx) {
+    use id <- param.int(ctx, "id")
+    use form <- pages.read_form(ctx)
+    case helpers.parse(form) {
+      Error(errors) ->
+        edit_page.show(ctx, id, form, errors) |> controller.with_status(422)
+      Ok(input) ->
+        case {{.Plural}}.update(db, id, input) {
+          Ok(item) -> pages.redirect(ctx, to: helpers.path(item))
+          Error(error) -> pages.error(ctx, error)
+        }
+    }
+  })
+  |> controller.post("/:id/delete", fn(ctx) {
+    use id <- param.int(ctx, "id")
+    case {{.Plural}}.delete(db, id) {
+      Ok(Nil) -> pages.redirect(ctx, to: "/{{.Plural}}")
+      Error(error) -> pages.error(ctx, error)
+    }
+  })
+}

@@ -144,6 +144,8 @@ src/
 ├── console.gleam             # console shortcuts
 {{- end}}
 ├── {{.Name}}/
+│   ├── layouts/
+│   │   └── default_layout.gleam   # what every page is rendered inside
 │   ├── site/
 │   │   ├── site_controller.gleam  # the home page and the live socket route
 │   │   └── todo_list.gleam        # the live todo list component
@@ -170,6 +172,23 @@ context and controller together; register controllers in
 `src/{{.Name}}.gleam`. To change the schema, add a new migration file with
 the next version and list it in `platform/database.gleam`; never edit a
 migration that has already been applied.
+
+## Layouts
+
+Everything around a page's content, from the HTML document with the theme
+and stylesheets to the header, comes from a layout in
+`src/{{.Name}}/layouts/`. The home page uses `default_layout.gleam`:
+
+```gleam
+default_layout.render(ctx, "About", [ui.h1("About"), ui.p([text("...")])])
+```
+
+Call `render_live` instead for a page with live sections (`live.mount`): it
+also loads the script they connect with, which other pages leave out.
+
+Pages that `howdy create page`, `live_page` and `pages` write use the
+default layout, or another one with `--layout <name>`, and
+`howdy create layout <name>` makes a new one to change.
 
 ## Styles
 

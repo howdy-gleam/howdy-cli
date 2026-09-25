@@ -100,8 +100,18 @@ For pages that people use rather than a JSON API,
 howdy create pages users user name:string age:int
 ```
 
-takes the same arguments and writes `users_pages.gleam` in place of the
-controller, with its own test:
+takes the same arguments and writes an HTML controller in place of the JSON
+one, `users_controller.gleam`, with its own test, and the pages it serves in
+`users/pages/`:
+
+| File | Holds |
+| --- | --- |
+| `users_controller.gleam` | the routes below, and what each does with a submitted form |
+| `pages/index_page.gleam` | every user, in a table |
+| `pages/show_page.gleam` | one user |
+| `pages/new_page.gleam` | the form for a new user |
+| `pages/edit_page.gleam` | the form to change one |
+| `pages/helpers.gleam` | the form both use, and the path of a user |
 
 | Method | Route | Page |
 | --- | --- | --- |
@@ -116,11 +126,14 @@ controller, with its own test:
 The pages are Howdy UI rendered on the server as plain links and forms, so
 they work without JavaScript (hence POST for update and delete). A form
 that fails validation comes back with its values and an error under each
-field. The layout, form reading and redirects live in
-`src/<project>/platform/pages.gleam` and the styles in
-`priv/public/assets/pages.css`; both are written the first time only and
-shared by every set of pages, so they are safe to edit. Pass `--api` to get
-the JSON controller as well.
+field. The pages render through the project's default layout, or the one
+`--layout <name>` names. Form reading, redirects and the error page live in
+`src/<project>/platform/pages.gleam`, written the first time only, and the
+styles for tables and forms are added to `priv/public/assets/style.css` the
+first time; both serve every set of pages and are safe to edit. Pass `--api` to get
+the JSON controller as well, as `users_api_controller.gleam`.
+`howdy create page users <name>` adds another page to the same controller,
+with its route ahead of `/users/:id` so the id does not take it.
 
 For data without a JSON API, reached from your own pages or other slices,
 
@@ -166,6 +179,31 @@ does the same with a live section on the page: a Lustre server component
 with its model, update and view in the page module, and its WebSocket
 routed at `/blog/editor/live`.
 
+## Layouts
+
+`howdy new` writes `src/<project>/layouts/default_layout.gleam`: everything
+around a page's content, from the HTML document with the theme and
+stylesheets to a header with the site name and the theme toggle. Pages call
+its `render(ctx, title, content)`, or `render_live` when they have live
+sections, which also loads the script those connect with; a page without
+them does not load it. The home page and every page the `create` commands
+write use the default layout.
+
+```sh
+howdy create layout admin
+```
+
+writes `layouts/admin_layout.gleam`, a copy of the default to change, and
+
+```sh
+howdy create page admin index --layout admin
+```
+
+makes a page that renders through it. `--layout` works on `page`,
+`live_page` and `pages`, and must name a layout that exists; without it the
+default is used. A project made before layouts gets the default one the
+first time a command needs it.
+
 ## Build
 
 Requires Go 1.25+.
@@ -187,7 +225,7 @@ go install .
 main.go
 internal/
 ├── cli/        cobra commands (root, new, create, dev)
-├── generate/   `howdy create controller`, `pages`, `repo`, `migration`, `page` and `live_page`: templates and registration
+├── generate/   `howdy create controller`, `pages`, `repo`, `migration`, `page`, `live_page` and `layout`: templates and registration
 ├── scaffold/   project validation and template rendering
 │   └── templates/
 │       ├── base/      the page-only project, rendered with text/template

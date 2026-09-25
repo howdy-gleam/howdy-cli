@@ -38,6 +38,8 @@ func (p *Project) Files() ([]File, error) {
 		"Release": p.Release,
 		// "true" unless --minimal: the admin, telemetry and console.
 		"Full": full(p.Minimal),
+		// The layout a layout template is rendered as; "default" here.
+		"Layout": "default",
 	}
 	sets := []string{"templates/base"}
 	if p.Database != NoDatabase {
@@ -61,6 +63,24 @@ func (p *Project) Files() ([]File, error) {
 	}
 	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
 	return files, nil
+}
+
+const layoutTemplate = "templates/base/src/__name__/layouts/default_layout.gleam.tmpl"
+
+// Layout renders a layout named layout ("default", "admin") for the
+// project name, from the template 'howdy new' writes the default one with.
+func Layout(name, layout string) ([]byte, error) {
+	src, err := templates.ReadFile(layoutTemplate)
+	if err != nil {
+		return nil, err
+	}
+	tmpl, err := template.New(layoutTemplate).Option("missingkey=error").Parse(string(src))
+	if err != nil {
+		return nil, err
+	}
+	var out bytes.Buffer
+	err = tmpl.Execute(&out, map[string]string{"Name": name, "Title": title(name), "Layout": layout})
+	return out.Bytes(), err
 }
 
 func full(minimal bool) string {

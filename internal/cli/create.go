@@ -22,11 +22,80 @@ func createCommand() *cobra.Command {
 	cmd.AddCommand(createMigrationCommand())
 	cmd.AddCommand(createPageCommand(false))
 	cmd.AddCommand(createPageCommand(true))
+	cmd.AddCommand(createLayoutCommand())
 	return cmd
+}
+
+func createLayoutCommand() *cobra.Command {
+	var plain bool
+	cmd := &cobra.Command{
+		Use:   "layout <name>",
+		Short: "Create a layout that pages can render through",
+		Long: `Create src/<project>/layouts/<name>_layout.gleam, a layout: everything around
+a page's content, from the HTML document with the theme and stylesheets to
+the header. It starts as a copy of the default layout that 'howdy new'
+writes, ready for you to change.
+
+A page renders through a layout with render, or render_live when it has
+live sections, which also loads the script they connect with. Pass
+--layout <name> to 'howdy create page', 'live_page' or 'pages' to use it.`,
+		Example: "  howdy create layout admin\n  howdy create page admin index --layout admin",
+		Args:    cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runCreateLayout(args[0], plain)
+		},
+	}
+	cmd.Flags().BoolVar(&plain, "plain", false, "print progress as plain lines instead of animating")
+	return cmd
+}
+
+func runCreateLayout(name string, plain bool) error {
+	dir, err := findProjectDir()
+	if err != nil {
+		return err
+	}
+	project, err := generate.Open(dir)
+	if err != nil {
+		return err
+	}
+	layout, err := generate.NewLayout(project, name)
+	if err != nil {
+		return err
+	}
+	steps := []tui.Step{
+		{
+			Title: "Creating the layout",
+			Run: func(r tui.Reporter) (string, error) {
+				return layout.File(), layout.Write()
+			},
+		},
+		{
+			Title: "Formatting Gleam sources",
+			Run: func(r tui.Reporter) (string, error) {
+				gleam, err := tools.FindGleam()
+				if err != nil {
+					r.Warn("gleam was not found on PATH; run 'gleam format' yourself.")
+					return "skipped", nil
+				}
+				return "gleam format", gleam.Run(dir, "format", "src")
+			},
+		},
+	}
+	if err := tui.Run(fmt.Sprintf("howdy create layout %s", layout.Name), steps, plain); err != nil {
+		return err
+	}
+	fmt.Print(tui.NextSteps(layout.Module(), []tui.Command{
+		{Cmd: fmt.Sprintf("howdy create page <controller> <page> --layout %s", layout.Name), Note: "make a page that uses it"},
+	}, []string{
+		fmt.Sprintf("Change the layout in %s; it starts as a copy of the default.", layout.File()),
+		fmt.Sprintf("To move an existing page onto it, import %s/layouts/%s and call %s.render, or render_live for a live page.", project.Name, layout.Module(), layout.Module()),
+	}))
+	return nil
 }
 
 func createPageCommand(live bool) *cobra.Command {
 	var plain bool
+	var layout string
 	cmd := &cobra.Command{
 		Use:   "page <controller> <page>",
 		Short: "Create a page and add it to a controller, creating the controller if needed",
@@ -41,10 +110,10 @@ whatever path the controller already uses. A page that already exists, or
 a route the controller already has, is refused and nothing is written.
 
 A test that the page responds is written to test/<project>/<controller>/pages/.`,
-		Example: "  howdy create page blog about\n  howdy create page blog index\n  howdy create page site contact",
+		Example: "  howdy create page blog about\n  howdy create page blog index\n  howdy create page site contact\n  howdy create page admin index --layout admin",
 		Args:    cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runCreatePage(args[0], args[1], live, plain)
+			return runCreatePage(args[0], args[1], live, layout, plain)
 		},
 	}
 	if live {
@@ -64,13 +133,14 @@ whatever path the controller already uses. A page that already exists, or
 a route the controller already has, is refused and nothing is written.
 
 A test that the page responds is written to test/<project>/<controller>/pages/.`
-		cmd.Example = "  howdy create live_page dashboard index\n  howdy create live_page blog editor"
+		cmd.Example = "  howdy create live_page dashboard index\n  howdy create live_page blog editor\n  howdy create live_page admin board --layout admin"
 	}
+	cmd.Flags().StringVar(&layout, "layout", "", "render the page through this layout from src/<project>/layouts/ instead of the default")
 	cmd.Flags().BoolVar(&plain, "plain", false, "print progress as plain lines instead of animating")
 	return cmd
 }
 
-func runCreatePage(controller, name string, live, plain bool) error {
+func runCreatePage(controller, name string, live bool, layout string, plain bool) error {
 	dir, err := findProjectDir()
 	if err != nil {
 		return err
@@ -79,7 +149,7 @@ func runCreatePage(controller, name string, live, plain bool) error {
 	if err != nil {
 		return err
 	}
-	page, err := generate.NewPage(project, controller, name, live)
+	page, err := generate.NewPage(project, controller, name, live, layout)
 	if err != nil {
 		return err
 	}
@@ -136,7 +206,7 @@ func runCreatePage(controller, name string, live, plain bool) error {
 	if !page.Exists {
 		notes = append(notes, fmt.Sprintf("The new %s controller is registered in src/%s.gleam.", controller, project.Name))
 	}
-	notes = append(notes, fmt.Sprintf("Add the page's content in %s.", page.File()))
+	notes = append(notes, fmt.Sprintf("Add the page's content in %s. It renders through %s.", page.File(), project.LayoutFile(page.Layout)))
 	fmt.Print(tui.NextSteps(page.Module(), []tui.Command{
 		{Cmd: "gleam dev", Note: "then open http://127.0.0.1:8787" + page.URL()},
 		{Cmd: "gleam test", Note: "run the tests, including the new one for the page"},
@@ -172,7 +242,7 @@ name is a string. Every record also gets an integer id.`,
 		Example: "  howdy create controller users user name:string age:int\n  howdy create controller blog_posts blog_post title body:string published:bool",
 		Args:    cobra.MinimumNArgs(3),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runCreateSlice("controller", args[0], args[1], args[2:], plain)
+			return runCreateSlice("controller", args[0], args[1], args[2:], "", plain)
 		},
 	}
 	cmd.Flags().BoolVar(&plain, "plain", false, "print progress as plain lines instead of animating")
@@ -201,7 +271,7 @@ name is a string. Every record also gets an integer id.`,
 		Example: "  howdy create repo users user name:string email:string age:int",
 		Args:    cobra.MinimumNArgs(3),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runCreateSlice("repo", args[0], args[1], args[2:], plain)
+			return runCreateSlice("repo", args[0], args[1], args[2:], "", plain)
 		},
 	}
 	cmd.Flags().BoolVar(&plain, "plain", false, "print progress as plain lines instead of animating")
@@ -210,15 +280,21 @@ name is a string. Every record also gets an integer id.`,
 
 func createPagesCommand() *cobra.Command {
 	var plain, api bool
+	var layout string
 	cmd := &cobra.Command{
 		Use:   "pages <plural> <singular> <field:type>...",
 		Short: "Create HTML pages to list, show, add, edit and delete a record, with its database operations and migration",
 		Long: `Create a slice of the current project with pages for people: a folder under
 src/<project>/ named after the plural, holding
 
-  <singular>.gleam       the record: types, validation and JSON codecs
-  <plural>.gleam         the database operations: all, find, create, update, delete
-  <plural>_pages.gleam   the routes and pages under /<plural>
+  <singular>.gleam              the record: types, validation and JSON codecs
+  <plural>.gleam                the database operations: all, find, create, update, delete
+  <plural>_controller.gleam     the routes under /<plural>
+  pages/index_page.gleam        every record, in a table
+  pages/show_page.gleam         one record
+  pages/new_page.gleam          the form for a new record
+  pages/edit_page.gleam         the form to change one
+  pages/helpers.gleam           the form both use, and where a record lives
 
   GET  /<plural>             every record, in a table
   GET  /<plural>/new         the form for a new record
@@ -230,14 +306,17 @@ src/<project>/ named after the plural, holding
 
 The pages are built from Howdy UI as plain links and forms, so they work
 without JavaScript; a form that fails validation is shown again with its
-values and the errors next to the fields. The layout and form helpers go in
-platform/pages.gleam and the styles in priv/public/assets/pages.css; both
-are written once and shared by every set of pages.
+values and the errors next to the fields. They render through the default
+layout in src/<project>/layouts/, or the one --layout names. The form
+helpers go in platform/pages.gleam and the styles are added to
+priv/public/assets/style.css; both happen once and serve every set of pages.
 
 It also writes a migration that creates the <plural> table and tests for
 the database operations and the pages, then registers the pages in
 src/<project>.gleam and the migration in platform/database.gleam. Pass
---api for the JSON controller of 'howdy create controller' as well.
+--api for the JSON controller of 'howdy create controller' as well, which
+is then called <plural>_api_controller.gleam. 'howdy create page <plural>
+<name>' adds another page to the same controller.
 
 Fields are name:type pairs. Types are string, int, float and bool; a bare
 name is a string. Every record also gets an integer id.`,
@@ -248,10 +327,11 @@ name is a string. Every record also gets an integer id.`,
 			if api {
 				kind = "pages+api"
 			}
-			return runCreateSlice(kind, args[0], args[1], args[2:], plain)
+			return runCreateSlice(kind, args[0], args[1], args[2:], layout, plain)
 		},
 	}
 	cmd.Flags().BoolVar(&api, "api", false, "also create the JSON controller under /api/<plural>")
+	cmd.Flags().StringVar(&layout, "layout", "", "render the pages through this layout from src/<project>/layouts/ instead of the default")
 	cmd.Flags().BoolVar(&plain, "plain", false, "print progress as plain lines instead of animating")
 	return cmd
 }
@@ -272,7 +352,7 @@ Column types follow the project's database, SQLite or PostgreSQL.`,
 		Example: "  howdy create migration users name:string email:string age:int",
 		Args:    cobra.MinimumNArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runCreateSlice("migration", args[0], "", args[1:], plain)
+			return runCreateSlice("migration", args[0], "", args[1:], "", plain)
 		},
 	}
 	cmd.Flags().BoolVar(&plain, "plain", false, "print progress as plain lines instead of animating")
@@ -281,7 +361,7 @@ Column types follow the project's database, SQLite or PostgreSQL.`,
 
 // runCreateSlice serves every subcommand; kind is "controller", "pages",
 // "pages+api", "repo" or "migration", and singular is empty for a migration.
-func runCreateSlice(kind, plural, singular string, fields []string, plain bool) error {
+func runCreateSlice(kind, plural, singular string, fields []string, layout string, plain bool) error {
 	dir, err := findProjectDir()
 	if err != nil {
 		return err
@@ -301,6 +381,11 @@ func runCreateSlice(kind, plural, singular string, fields []string, plain bool) 
 	}
 	slice.Routes = kind == "controller" || kind == "pages+api"
 	slice.Pages = strings.HasPrefix(kind, "pages")
+	if slice.Pages {
+		if slice.Layout, err = project.ResolveLayout(layout); err != nil {
+			return err
+		}
+	}
 	kind = strings.TrimSuffix(kind, "+api")
 	registering, registered := "Registering the migration", "platform/database.gleam"
 	if slice.Routes || slice.Pages {
@@ -366,7 +451,7 @@ func runCreateSlice(kind, plural, singular string, fields []string, plain bool) 
 	switch {
 	case slice.Pages:
 		commands = append(commands, tui.Command{Cmd: "gleam dev", Note: fmt.Sprintf("then open http://127.0.0.1:8787/%s", plural)})
-		notes = append(notes, fmt.Sprintf("The pages are in src/%s/%s/%s.gleam; the layout they share is src/%s/platform/pages.gleam.", project.Name, plural, slice.PagesModule(), project.Name))
+		notes = append(notes, fmt.Sprintf("The pages are in src/%s/%s/pages/ and their routes in %s.gleam; the layout every set of pages shares is src/%s/platform/pages.gleam.", project.Name, plural, slice.PagesModule(), project.Name))
 	case slice.Routes:
 		commands = append(commands, tui.Command{Cmd: "gleam dev", Note: fmt.Sprintf("then try http://127.0.0.1:8787/api/%s", plural)})
 	default:

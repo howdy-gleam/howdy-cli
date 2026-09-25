@@ -1,6 +1,7 @@
-//// Shared by the HTML pages that `howdy create pages` writes: the page
-//// layout, reading HTML forms, redirects and error pages. It is yours to
-//// change; the command only writes it when it is missing.
+//// Shared by the HTML pages that `howdy create pages` writes: reading HTML
+//// forms, redirects and error pages. The pages get everything around them
+//// from a layout in `layouts/`. This file is yours to change; the command
+//// only writes it when it is missing.
 
 import gleam/bit_array
 import gleam/float
@@ -11,51 +12,24 @@ import gleam/result
 import gleam/string
 import gleam/uri
 import howdy/controller.{type Context}
-import howdy/cookie
 import howdy/service
 import howdy/ui
 import howdy/ui/button
-import howdy/ui/page
 import howdy/validate
 import lustre/attribute as a
 import lustre/element.{type Element, text}
 import lustre/element/html as h
+import {{.Project.Name}}/layouts/default_layout
 
 /// The fields of a submitted form, as the browser sent them.
 pub type Form =
   List(#(String, String))
 
-// -- Layout ------------------------------------------------------------------
-
-/// A full page with the project's theme and stylesheets.
-pub fn layout(ctx: Context, title: String, body: List(Element(msg))) {
-  use theme <- cookie.string_or(ctx, "theme", default: "system")
-  page.new(title)
-  |> page.theme(theme)
-  |> page.stylesheet(at: "/assets/ui.css")
-  |> page.head([
-    h.link([a.rel("icon"), a.href("data:,")]),
-    h.link([a.rel("stylesheet"), a.href("/assets/style.css")]),
-    h.link([a.rel("stylesheet"), a.href("/assets/pages.css")]),
-  ])
-  |> page.body([
-    ui.container([], [
-      ui.stack([], [
-        ui.row([], [
-          ui.h1(title),
-          ui.theme_toggle([text("Toggle theme")], from: "light", to: "dark"),
-        ]),
-        ..body
-      ]),
-    ]),
-  ])
-  |> page.respond(ctx)
-}
-
 /// An error as a page, with the status that fits it: 404 for a missing
 /// record, 500 for a database failure and so on.
 pub fn error(ctx: Context, error: service.Error) {
-  layout(ctx, "Something went wrong", [
+  default_layout.render(ctx, "Something went wrong", [
+    ui.h1("Something went wrong"),
     ui.card([], [
       ui.p([text(service.message(error))]),
       ui.p([ui.link("/", [text("Back to the home page")])]),
