@@ -17,13 +17,14 @@ import (
 //go:embed templates/*.tmpl
 var templates embed.FS
 
-// Project is an existing Howdy project with a database.
+// Project is an existing Howdy project.
 type Project struct {
 	// Dir is the directory holding gleam.toml.
 	Dir string
 	// Name is the Gleam project name.
 	Name string
-	// Database is "sqlite" or "postgres".
+	// Database is "sqlite" or "postgres", or "" for a project without one,
+	// which only Open accepts.
 	Database string
 	// HowdyDatabase reports whether the project depends on howdy_database,
 	// whose `database.returning` replaces the helper older projects carry
@@ -38,7 +39,21 @@ var (
 
 // Load reads gleam.toml in dir and works out which database the project uses:
 // PostgreSQL if it depends on pog, otherwise SQLite if it depends on Gloo.
+// A project without a database is an error.
 func Load(dir string) (*Project, error) {
+	p, err := Open(dir)
+	if err != nil {
+		return nil, err
+	}
+	if p.Database == "" {
+		return nil, errors.New("this project has no database: 'howdy create controller' needs Gloo, which 'howdy new' sets up unless --no-database is passed")
+	}
+	return p, nil
+}
+
+// Open reads gleam.toml in dir like Load, but also accepts a project without
+// a database.
+func Open(dir string) (*Project, error) {
 	toml, err := os.ReadFile(filepath.Join(dir, "gleam.toml"))
 	if err != nil {
 		return nil, err
@@ -50,7 +65,6 @@ func Load(dir string) (*Project, error) {
 	p := &Project{Dir: dir, Name: string(m[1]), HowdyDatabase: dependency("howdy_database").Match(toml)}
 	switch {
 	case !dependency("gloo").Match(toml):
-		return nil, errors.New("this project has no database: 'howdy create controller' needs Gloo, which 'howdy new' sets up unless --no-database is passed")
 	case dependency("pog").Match(toml):
 		p.Database = "postgres"
 	default:

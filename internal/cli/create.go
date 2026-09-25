@@ -20,7 +20,128 @@ func createCommand() *cobra.Command {
 	cmd.AddCommand(createPagesCommand())
 	cmd.AddCommand(createRepoCommand())
 	cmd.AddCommand(createMigrationCommand())
+	cmd.AddCommand(createPageCommand(false))
+	cmd.AddCommand(createPageCommand(true))
 	return cmd
+}
+
+func createPageCommand(live bool) *cobra.Command {
+	var plain bool
+	cmd := &cobra.Command{
+		Use:   "page <controller> <page>",
+		Short: "Create a page and add it to a controller, creating the controller if needed",
+		Long: `Create src/<project>/<controller>/pages/<page>_page.gleam, a page ready for
+your content, and add its route to <controller>_controller.gleam, which sits
+beside the pages folder. The page is at /<controller>/<page>, or at /<controller> for a page
+named index.
+
+If the controller does not exist it is created and registered in
+src/<project>.gleam. If it does, the page is added to it and served under
+whatever path the controller already uses. A page that already exists, or
+a route the controller already has, is refused and nothing is written.
+
+A test that the page responds is written to test/<project>/<controller>/pages/.`,
+		Example: "  howdy create page blog about\n  howdy create page blog index\n  howdy create page site contact",
+		Args:    cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runCreatePage(args[0], args[1], live, plain)
+		},
+	}
+	if live {
+		cmd.Use = "live_page <controller> <page>"
+		cmd.Short = "Create a page with a live section and add it to a controller, creating the controller if needed"
+		cmd.Long = `Create src/<project>/<controller>/pages/<page>_page.gleam, a page with a
+live section ready for your content: a Lustre server component whose model,
+update and view run on the server, with the browser showing each change it
+sends over a WebSocket. The page's routes are added to
+<controller>_controller.gleam, which sits beside the pages folder: the page at
+/<controller>/<page> (or /<controller> for a page named index) and its
+WebSocket at /<controller>/<page>/live.
+
+If the controller does not exist it is created and registered in
+src/<project>.gleam. If it does, the page is added to it and served under
+whatever path the controller already uses. A page that already exists, or
+a route the controller already has, is refused and nothing is written.
+
+A test that the page responds is written to test/<project>/<controller>/pages/.`
+		cmd.Example = "  howdy create live_page dashboard index\n  howdy create live_page blog editor"
+	}
+	cmd.Flags().BoolVar(&plain, "plain", false, "print progress as plain lines instead of animating")
+	return cmd
+}
+
+func runCreatePage(controller, name string, live, plain bool) error {
+	dir, err := findProjectDir()
+	if err != nil {
+		return err
+	}
+	project, err := generate.Open(dir)
+	if err != nil {
+		return err
+	}
+	page, err := generate.NewPage(project, controller, name, live)
+	if err != nil {
+		return err
+	}
+	registered := page.ControllerFile()
+	if !page.Exists {
+		registered += fmt.Sprintf(", src/%s.gleam", project.Name)
+	}
+
+	var notes []string
+	steps := []tui.Step{
+		{
+			Title: "Creating files",
+			Run: func(r tui.Reporter) (string, error) {
+				written, err := page.Write()
+				for _, path := range written {
+					r.Log(path)
+				}
+				if err != nil {
+					return "", err
+				}
+				return fmt.Sprintf("%d files", len(written)), nil
+			},
+		},
+		{
+			Title: "Adding the routes",
+			Run: func(r tui.Reporter) (string, error) {
+				notes = page.Register()
+				if len(notes) > 0 {
+					return "needs a hand, see below", nil
+				}
+				return registered, nil
+			},
+		},
+		{
+			Title: "Formatting Gleam sources",
+			Run: func(r tui.Reporter) (string, error) {
+				gleam, err := tools.FindGleam()
+				if err != nil {
+					r.Warn("gleam was not found on PATH; run 'gleam format' yourself.")
+					return "skipped", nil
+				}
+				return "gleam format", gleam.Run(dir, "format", "src", "test")
+			},
+		},
+	}
+	kind := "page"
+	if live {
+		kind = "live_page"
+	}
+	if err := tui.Run(fmt.Sprintf("howdy create %s %s %s", kind, controller, page.Name), steps, plain); err != nil {
+		return err
+	}
+
+	if !page.Exists {
+		notes = append(notes, fmt.Sprintf("The new %s controller is registered in src/%s.gleam.", controller, project.Name))
+	}
+	notes = append(notes, fmt.Sprintf("Add the page's content in %s.", page.File()))
+	fmt.Print(tui.NextSteps(page.Module(), []tui.Command{
+		{Cmd: "gleam dev", Note: "then open http://127.0.0.1:8787" + page.URL()},
+		{Cmd: "gleam test", Note: "run the tests, including the new one for the page"},
+	}, notes))
+	return nil
 }
 
 func createControllerCommand() *cobra.Command {

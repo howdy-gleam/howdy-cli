@@ -1,0 +1,8 @@
+//// The {{.ControllerTitle}} pages, under `/{{.Prefix}}`. Add another with
+//// `howdy create page {{.Controller}} <name>` or `howdy create live_page {{.Controller}} <name>`.
+
+import howdy/controller
+
+pub fn controller() {
+  controller.new("{{.Prefix}}")
+}

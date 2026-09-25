@@ -141,6 +141,31 @@ writes `migrations/create_users.gleam` and adds it to the list in
 `platform/database.gleam`, and nothing else. It takes the table name alone,
 without the singular, so every field needs its type here.
 
+For a single page, in any project,
+
+```sh
+howdy create page blog about
+```
+
+writes `src/<project>/blog/pages/about_page.gleam`, a page ready for your
+content, and adds its route to `blog/blog_controller.gleam`, beside the
+`pages` folder: the page is at
+`/blog/about`, or at `/blog` for a page named `index`. If the controller does
+not exist it is created and registered in `src/<project>.gleam`; if it does,
+the page is added to its routes and served under the path the controller
+already uses (so `howdy create page site contact` gives `/contact`). A page
+whose file already exists, or whose path the controller already routes, is
+refused and nothing is written. A test that the page responds goes in
+`test/<project>/blog/pages/`.
+
+```sh
+howdy create live_page blog editor
+```
+
+does the same with a live section on the page: a Lustre server component
+with its model, update and view in the page module, and its WebSocket
+routed at `/blog/editor/live`.
+
 ## Build
 
 Requires Go 1.25+.
@@ -162,7 +187,7 @@ go install .
 main.go
 internal/
 ├── cli/        cobra commands (root, new, create, dev)
-├── generate/   `howdy create controller`, `pages`, `repo` and `migration`: templates and registration
+├── generate/   `howdy create controller`, `pages`, `repo`, `migration`, `page` and `live_page`: templates and registration
 ├── scaffold/   project validation and template rendering
 │   └── templates/
 │       ├── base/      the page-only project, rendered with text/template

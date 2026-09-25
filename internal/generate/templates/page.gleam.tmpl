@@ -1,0 +1,31 @@
+//// The {{.Title}} page, at `{{.URL}}`. Put what it shows in `content`.
+
+import howdy/controller.{type Context}
+import howdy/cookie
+import howdy/ui
+import howdy/ui/page
+import lustre/attribute as a
+import lustre/element.{type Element, text}
+import lustre/element/html as h
+
+pub fn show(ctx: Context) {
+  // The choice the theme toggle on the home page stores.
+  use theme <- cookie.string_or(ctx, "theme", default: "system")
+
+  page.new("{{.Title}}")
+  |> page.theme(theme)
+  |> page.stylesheet(at: "/assets/ui.css")
+  |> page.head([
+    h.link([a.rel("icon"), a.href("data:,")]),
+    h.link([a.rel("stylesheet"), a.href("/assets/style.css")]),
+  ])
+  |> page.body([ui.container([], [ui.stack([], content())])])
+  |> page.respond(ctx)
+}
+
+fn content() -> List(Element(msg)) {
+  [
+    ui.h1("{{.Title}}"),
+    ui.p([text("Add this page's content in {{.File}}.")]),
+  ]
+}

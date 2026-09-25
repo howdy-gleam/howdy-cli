@@ -1,0 +1,80 @@
+//// The {{.Title}} page, at `{{.URL}}`, with a live section: a Lustre server
+//// component. Its model, update and view run on the server, the browser
+//// renders the changes it receives over a WebSocket at `{{.SocketURL}}`, and
+//// every tab gets its own copy. Put what it shows in `view`.
+
+import gleam/int
+import howdy/controller.{type Context}
+import howdy/cookie
+import howdy/ui
+import howdy/ui/button
+import howdy/ui/live
+import howdy/ui/page
+import lustre
+import lustre/attribute as a
+import lustre/component
+import lustre/effect
+import lustre/element.{type Element, text}
+import lustre/element/html as h
+import lustre/event
+
+pub fn show(ctx: Context) {
+  // The choice the theme toggle on the home page stores.
+  use theme <- cookie.string_or(ctx, "theme", default: "system")
+
+  page.new("{{.Title}}")
+  |> page.theme(theme)
+  |> page.stylesheet(at: "/assets/ui.css")
+  |> page.live
+  |> page.head([
+    h.link([a.rel("icon"), a.href("data:,")]),
+    h.link([a.rel("stylesheet"), a.href("/assets/style.css")]),
+  ])
+  |> page.body([
+    ui.container([], [
+      ui.stack([], [
+        ui.h1("{{.Title}}"),
+        live.mount("{{.SocketURL}}"),
+        h.noscript([], [ui.p([text("This page needs JavaScript.")])]),
+      ]),
+    ]),
+  ])
+  |> page.respond(ctx)
+}
+
+/// The WebSocket the live section connects to.
+pub fn socket(ctx: Context) {
+  live.serve(ctx, app(), with: Nil)
+}
+
+pub type Model {
+  Model(clicks: Int)
+}
+
+pub type Msg {
+  Clicked
+}
+
+pub fn app() -> lustre.App(Nil, Model, Msg) {
+  lustre.component(
+    fn(_) { #(Model(clicks: 0), effect.none()) },
+    fn(model, msg) { #(update(model, msg), effect.none()) },
+    view,
+    [component.open_shadow_root(True), component.adopt_styles(True)],
+  )
+}
+
+fn update(model: Model, msg: Msg) -> Model {
+  case msg {
+    Clicked -> Model(clicks: model.clicks + 1)
+  }
+}
+
+fn view(model: Model) -> Element(Msg) {
+  ui.card([], [
+    ui.p([text("Add this page's content in {{.File}}.")]),
+    ui.button(button.Primary, [event.on_click(Clicked)], [
+      text("Clicked " <> int.to_string(model.clicks) <> " times"),
+    ]),
+  ])
+}

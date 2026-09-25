@@ -1,0 +1,30 @@
+import gleam/string
+import howdy/testing
+{{- if .HasDatabase}}
+import {{.Project.Name}}/support
+{{- else}}
+import {{.Project.Name}}
+{{- end}}
+
+pub fn {{.Module}}_test() {
+{{- if .HasDatabase}}
+  use db <- support.with_db()
+  let res = testing.get("{{.URL}}") |> testing.send(support.app(db))
+{{- else}}
+  let res = testing.get("{{.URL}}") |> testing.send({{.Project.Name}}.app())
+{{- end}}
+  assert res.status == 200
+  assert string.contains(testing.text(res), "{{.Title}}")
+}
+{{- if .Live}}
+
+pub fn {{.Module}}_socket_requires_websocket_test() {
+{{- if .HasDatabase}}
+  use db <- support.with_db()
+  let res = testing.get("{{.SocketURL}}") |> testing.send(support.app(db))
+{{- else}}
+  let res = testing.get("{{.SocketURL}}") |> testing.send({{.Project.Name}}.app())
+{{- end}}
+  assert res.status == 426
+}
+{{- end}}
