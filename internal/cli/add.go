@@ -19,7 +19,135 @@ func addCommand() *cobra.Command {
 	}
 	cmd.AddCommand(addMailCommand())
 	cmd.AddCommand(addAuthCommand())
+	cmd.AddCommand(addRemoteCommand())
 	return cmd
+}
+
+func addRemoteCommand() *cobra.Command {
+	var plain, skipDeps bool
+	cmd := &cobra.Command{
+		Use:   "remote",
+		Short: "Add typed calls between services with Howdy Remote, over Erlang distribution or HTTP",
+		Long: `Add remote procedure calls to the current project with Howdy Remote.
+
+It adds howdy_remote, from the same release as the project's other Howdy
+packages, to gleam.toml, then writes
+
+  src/<project>/procedures.gleam           the procedures the app serves: a name, input and output
+  src/<project>/platform/rpc.gleam         the server that answers them, and the RPC token
+  test/<project>/platform/rpc_test.gleam   calls the example procedure both ways
+
+and serves the procedures two ways:
+
+  cluster   main and the dev server start the server, so other nodes
+            connected to this one call it with remote.cluster()
+  HTTP      the app mounts POST /rpc/<procedure name>, for callers that send
+            authorization: Bearer $RPC_TOKEN; without RPC_TOKEN it refuses all
+
+The token is in the app's services as rpc_token. Call another service with
+remote.call(target, procedure, input, timeout: 5000).`,
+		Example: "  howdy add remote",
+		Args:    cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runAddRemote(plain, skipDeps)
+		},
+	}
+	cmd.Flags().BoolVar(&skipDeps, "skip-deps", false, "do not run 'gleam deps download' after changing gleam.toml")
+	cmd.Flags().BoolVar(&plain, "plain", false, "print progress as plain lines instead of animating")
+	return cmd
+}
+
+func runAddRemote(plain, skipDeps bool) error {
+	dir, err := findProjectDir()
+	if err != nil {
+		return err
+	}
+	project, err := generate.Open(dir)
+	if err != nil {
+		return err
+	}
+	rm, err := generate.NewRemote(project)
+	if err != nil {
+		return err
+	}
+
+	var gleam tools.Tool
+	var notes []string
+	steps := []tui.Step{
+		{
+			Title: "Checking for Gleam",
+			Run: func(r tui.Reporter) (string, error) {
+				var err error
+				gleam, err = tools.FindGleam()
+				return gleam.Version, err
+			},
+		},
+		{
+			Title: "Adding Howdy Remote",
+			Run: func(r tui.Reporter) (string, error) {
+				changed, err := rm.Write()
+				for _, path := range changed {
+					r.Log(path)
+				}
+				if err != nil {
+					return "", err
+				}
+				return fmt.Sprintf("howdy_remote %s, %d files", rm.Ref, len(changed)), nil
+			},
+		},
+		{
+			Title: "Wiring up the procedure server",
+			Run: func(r tui.Reporter) (string, error) {
+				notes = rm.Register()
+				if len(notes) > 0 {
+					return "needs a hand, see below", nil
+				}
+				return "services, /rpc, cluster, tests", nil
+			},
+		},
+		{
+			Title: "Formatting Gleam sources",
+			Run: func(r tui.Reporter) (string, error) {
+				return "gleam format", gleam.Run(dir, "format", "src", "dev", "test")
+			},
+		},
+		{
+			Title: "Downloading dependencies",
+			Skip: func() (string, bool) {
+				if skipDeps {
+					return "skipped (--skip-deps)", true
+				}
+				return "", false
+			},
+			Run: func(r tui.Reporter) (string, error) {
+				r.Detail("gleam deps download")
+				if err := gleam.Run(dir, "deps", "download"); err != nil {
+					r.Warn("Dependency download failed; run 'gleam deps download' to see why.")
+					return "failed", nil
+				}
+				return "ready", nil
+			},
+		},
+	}
+	if err := tui.Run("howdy add remote", steps, plain); err != nil {
+		return err
+	}
+
+	for i, note := range notes {
+		notes[i] = "Needs a hand: " + note
+	}
+	notes = append(notes,
+		fmt.Sprintf("Define procedures in %s and answer them in server() in %s.", rm.ProceduresFile(), rm.RPCFile()),
+		"Call another service with remote.call(remote.cluster(), its_api.get_user(), 42, timeout: 5000), or a",
+		"remote.node(name) or remote.http(url, token:) target, and answer a request with |> remote.respond(ctx, to_json).",
+		"Set RPC_TOKEN to a long random secret to serve over HTTP (see .env.example); connect nodes only on a private network.",
+	)
+	commands := []tui.Command{
+		{Cmd: "ERL_FLAGS=\"-sname " + project.Name + " -setcookie <cookie>\" gleam dev", Note: "serve the procedures to other nodes"},
+		{Cmd: "gleam test", Note: "call the example procedure on the cluster and over HTTP"},
+	}
+	fmt.Print(tui.NextSteps("remote", commands, notes))
+	return nil
 }
 
 func addAuthCommand() *cobra.Command {

@@ -1,0 +1,70 @@
+//// The 404 page for people, JSON for everything else. Every route's answer
+//// passes through `middleware`: when it is a 404 carrying Howdy's JSON
+//// error, or nothing, and the request comes from a browser that prefers
+//// HTML, the visitor gets `site/pages/not_found_page.gleam` instead. API
+//// clients, `fetch` and curl keep the JSON, and a 404 page a controller
+//// rendered itself is left as it is.
+
+import gleam/float
+import gleam/http/request
+import gleam/http/response.{type Response}
+import gleam/int
+import gleam/list
+import gleam/result
+import gleam/string
+import howdy/controller.{type Context, type Next}
+import {{.Name}}/site/pages/not_found_page
+
+pub fn middleware(ctx: Context, next: Next) {
+  let res = next(ctx)
+  case res.status == 404 && !is_html(res) && prefers_html(ctx) {
+    True -> not_found_page.show(ctx)
+    False -> res
+  }
+}
+
+fn is_html(res: Response(body)) -> Bool {
+  case response.get_header(res, "content-type") {
+    Ok(content_type) -> string.starts_with(content_type, "text/html")
+    Error(Nil) -> False
+  }
+}
+
+/// Whether the `Accept` header ranks HTML at least as high as JSON.
+/// Browsers name `text/html`; API clients ask for `application/json`; and
+/// `*/*` alone, which fetch and curl send, counts as neither, so it gets JSON.
+pub fn prefers_html(ctx: Context) -> Bool {
+  let accept = request.get_header(ctx.request, "accept") |> result.unwrap("")
+  let html = quality(accept, ["text/html", "application/xhtml+xml"])
+  let json = quality(accept, ["application/json"])
+  html >. 0.0 && html >=. json
+}
+
+// The highest q the header gives any of the media types, 0.0 if none.
+fn quality(accept: String, types: List(String)) -> Float {
+  accept
+  |> string.split(",")
+  |> list.filter_map(fn(range) {
+    case string.split(range, ";") |> list.map(string.trim) {
+      [media, ..params] ->
+        case list.contains(types, string.lowercase(media)) {
+          True -> Ok(q(params))
+          False -> Error(Nil)
+        }
+      [] -> Error(Nil)
+    }
+  })
+  |> list.fold(0.0, float.max)
+}
+
+fn q(params: List(String)) -> Float {
+  list.find_map(params, fn(param) {
+    case string.split_once(param, "=") {
+      Ok(#("q", value)) ->
+        float.parse(value)
+        |> result.lazy_or(fn() { int.parse(value) |> result.map(int.to_float) })
+      _ -> Error(Nil)
+    }
+  })
+  |> result.unwrap(1.0)
+}

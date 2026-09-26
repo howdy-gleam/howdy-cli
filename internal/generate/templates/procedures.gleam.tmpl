@@ -1,0 +1,18 @@
+//// The procedures this app serves with howdy_remote: each is a name, and
+//// the types it takes and returns. A service that calls them needs the
+//// same definitions, so copy this module to it, or move it into a small
+//// package that both depend on.
+////
+//// Prefix each name with the service, as in "{{.Name}}.ping": the name is
+//// all that crosses the wire. Handle each procedure in platform/rpc.gleam.
+
+import howdy/remote
+
+/// Answers with the text it is sent, to check that the service is up.
+pub fn ping() -> remote.Procedure(String, String) {
+  remote.procedure(
+    "{{.Name}}.ping",
+    input: remote.string(),
+    output: remote.string(),
+  )
+}

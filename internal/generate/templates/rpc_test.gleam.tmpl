@@ -1,0 +1,37 @@
+import gleam/dynamic/decode
+import gleam/json
+import howdy/remote
+import howdy/testing
+import {{.Name}}/platform/rpc
+import {{.Name}}/procedures
+import {{.Name}}/support
+
+pub fn ping_on_the_cluster_test() {
+  let assert Ok(_) = remote.start(rpc.server())
+  let assert Ok(answer) =
+    remote.call(remote.cluster(), procedures.ping(), "hello", timeout: 1000)
+  assert answer == "hello"
+}
+
+pub fn ping_over_http_test() {
+{{- if .Database}}
+  use db <- support.with_db()
+{{- end}}
+  let res =
+    testing.post("/rpc/{{.Name}}.ping", json.string("hello"))
+    |> testing.header("authorization", "Bearer {{.Token}}")
+    |> testing.send(support.app({{if .Database}}db{{end}}))
+  assert res.status == 200
+  assert testing.json(res, decode.string) == Ok("hello")
+}
+
+pub fn http_needs_the_token_test() {
+{{- if .Database}}
+  use db <- support.with_db()
+{{- end}}
+  let res =
+    testing.post("/rpc/{{.Name}}.ping", json.string("hello"))
+    |> testing.header("authorization", "Bearer wrong")
+    |> testing.send(support.app({{if .Database}}db{{end}}))
+  assert res.status == 401
+}

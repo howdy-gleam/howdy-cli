@@ -1,0 +1,21 @@
+//// The page people see for an address the site does not have, with the
+//// 404 status. Change it as you like: `platform/not_found.gleam` decides
+//// when it is shown instead of the JSON error API clients get.
+
+import howdy/controller.{type GuardedContext}
+import howdy/ui
+import lustre/element.{text}
+import {{.Name}}/layouts/default_layout
+
+pub fn show(ctx: GuardedContext(guarded)) {
+  default_layout.render(ctx, "Page not found", [
+    ui.h1("Page not found"),
+    ui.p([
+      text(
+        "There is nothing at this address. It may have moved, or the link may be wrong.",
+      ),
+    ]),
+    ui.p([ui.link("/", [text("Back to the home page")])]),
+  ])
+  |> controller.with_status(404)
+}

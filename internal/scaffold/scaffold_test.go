@@ -62,6 +62,8 @@ func TestWriteRendersProject(t *testing.T) {
 		"src/tasks/css.gleam", "dev/demo_site_dev.gleam",
 		"test/demo_site_test.gleam", "test/demo_site/site/site_controller_test.gleam",
 		"priv/public/assets/style.css", "priv/public/assets/ui.css",
+		"src/demo_site/site/pages/not_found_page.gleam", "src/demo_site/platform/not_found.gleam",
+		"test/demo_site/site/not_found_test.gleam",
 	}
 	for _, w := range want {
 		if _, err := os.Stat(filepath.Join(p.Dir, w)); err != nil {

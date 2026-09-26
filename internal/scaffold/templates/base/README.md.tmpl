@@ -153,6 +153,15 @@ Pages that `howdy create page`, `live_page` and `pages` write use the
 default layout, or another one with `--layout <name>`, and
 `howdy create layout <name>` makes a new one to change.
 
+## The 404 page
+
+An address the site does not have shows `src/{{.Name}}/site/pages/not_found_page.gleam`
+to people, rendered with the default layout, and change it as you like.
+API clients, `fetch` and curl get Howdy's JSON error instead: the middleware in
+`src/{{.Name}}/platform/not_found.gleam` shows the page only when the request's
+`Accept` header prefers HTML, as a browser's does, and leaves any 404 page a
+controller rendered itself alone.
+
 ## Components
 
 Pieces of view that pages reuse live in `src/{{.Name}}/components/`, or in

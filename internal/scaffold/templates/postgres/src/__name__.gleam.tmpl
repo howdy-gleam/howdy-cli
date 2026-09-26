@@ -19,6 +19,7 @@ import howdy/telemetry
 {{- end}}
 import logging
 import {{.Name}}/platform/database
+import {{.Name}}/platform/not_found
 import {{.Name}}/site/site_controller as site
 import {{.Name}}/todos/todo_controller as todos
 
@@ -38,6 +39,8 @@ pub fn app(services: Services) -> howdy.App {
   |> howdy.controller(site.controller(db))
   // The root static controller is a catch-all, so mount it last.
   |> howdy.controller(static.serve("/", from: "priv/public"))
+  // People get the 404 page, API clients JSON: see platform/not_found.gleam.
+  |> howdy.middleware(not_found.middleware)
 }
 
 /// Configure logging and load `.env` from the working directory. Call once

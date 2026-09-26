@@ -18,6 +18,12 @@ development and a test database. `--database sqlite` is the default, and
 `--no-database` gives a page-only project. The layout is a trimmed-down
 version of `howdy_example`.
 
+Every project has a 404 page, `site/pages/not_found_page.gleam`, rendered
+with its default layout. Middleware in `platform/not_found.gleam` shows it
+for a 404 when the request's `Accept` header prefers HTML, as a browser's
+does; API clients, `fetch` and curl get Howdy's JSON error, and a 404 page a
+controller rendered itself is kept.
+
 Every project is also set up for development with the rest of Howdy:
 
 - **Howdy Admin** (`howdy_admin`, a dev dependency) is mounted at `/_howdy`
@@ -291,6 +297,27 @@ previews. Guard a controller with
 `APP_ORIGIN` to the site's public address before deploying.
 
 ```sh
+howdy add remote
+```
+
+adds typed calls between services with `howdy_remote`, and writes:
+
+| File | Holds |
+| --- | --- |
+| `src/<project>/procedures.gleam` | the procedures the app serves, each a name, input and output; an example `ping` |
+| `src/<project>/platform/rpc.gleam` | the server that answers them, and the token from `RPC_TOKEN` |
+| `test/<project>/platform/rpc_test.gleam` | calls `ping` on the cluster and over HTTP |
+
+`main` and the dev server start the procedure server, so the other nodes of
+an Erlang cluster (run with `ERL_FLAGS="-sname <name> -setcookie <cookie>"`)
+call it with `remote.cluster()`. The app also mounts
+`POST /rpc/<procedure name>` ahead of its other routes, for callers that
+send `authorization: Bearer <token>`. The token is `rpc_token` in the
+services: `RPC_TOKEN` in `main` and the dev server, where an unset one
+refuses every request, and a fixed one in the test support. Call another
+service with `remote.call(target, procedure, input, timeout: 5000)`.
+
+```sh
 howdy create email password_reset
 ```
 
@@ -318,7 +345,7 @@ go install .
 main.go
 internal/
 ├── cli/        cobra commands (root, new, create, add, dev)
-├── generate/   `howdy create controller`, `pages`, `repo`, `migration`, `page`, `live_page`, `layout`, `component`, `live_component` and `email`, and `howdy add mail` and `auth`: templates and wiring
+├── generate/   `howdy create controller`, `pages`, `repo`, `migration`, `page`, `live_page`, `layout`, `component`, `live_component` and `email`, and `howdy add mail`, `auth` and `remote`: templates and wiring
 ├── scaffold/   project validation and template rendering
 │   └── templates/
 │       ├── base/      the page-only project, rendered with text/template

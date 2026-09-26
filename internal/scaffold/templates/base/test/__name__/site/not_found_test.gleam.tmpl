@@ -1,0 +1,49 @@
+import gleam/http/response
+import gleam/string
+import howdy/testing
+import {{.Name}}/support
+
+// What a browser sends when following a link.
+const browser = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+
+fn get(path: String, accept: String) {
+  let req = case accept {
+    "" -> testing.get(path)
+    _ -> testing.get(path) |> testing.header("accept", accept)
+  }
+{{- if .Database}}
+  use db <- support.with_db()
+  testing.send(req, support.app(db))
+{{- else}}
+  testing.send(req, support.app())
+{{- end}}
+}
+
+pub fn browsers_get_the_not_found_page_test() {
+  let res = get("/no/such/page", browser)
+  assert res.status == 404
+  assert response.get_header(res, "content-type")
+    == Ok("text/html; charset=utf-8")
+  assert string.contains(testing.text(res), "Page not found")
+}
+
+pub fn api_clients_get_json_test() {
+  let res = get("/no/such/page", "application/json")
+  assert res.status == 404
+  let assert Ok(content_type) = response.get_header(res, "content-type")
+  assert string.starts_with(content_type, "application/json")
+  assert string.contains(testing.text(res), "\"error\"")
+}
+
+pub fn fetch_and_curl_get_json_test() {
+  let res = get("/no/such/page", "*/*")
+  assert res.status == 404
+  assert !string.contains(testing.text(res), "Page not found")
+  assert get("/no/such/page", "").status == 404
+}
+
+pub fn json_preferred_over_html_gets_json_test() {
+  let res = get("/no/such/page", "text/html;q=0.5, application/json")
+  assert !string.contains(testing.text(res), "Page not found")
+}
+

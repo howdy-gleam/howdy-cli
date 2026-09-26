@@ -1,0 +1,56 @@
+//// Remote procedure calls with howdy_remote. The procedures in
+//// {{.Name}}/procedures.gleam are served two ways:
+////
+//// - to the other nodes of an Erlang cluster, started in `main` and the dev
+////   server. Nodes need a name and a shared cookie:
+////   `ERL_FLAGS="-sname web -setcookie $COOKIE" gleam run`. Connect only
+////   your own nodes on a private network: connected nodes trust each
+////   other completely.
+//// - over HTTP, as `POST /rpc/<procedure name>` with the JSON input as the
+////   body and `authorization: Bearer $RPC_TOKEN`. Without RPC_TOKEN every
+////   request is refused.
+////
+//// To call another service, use its procedures with a target:
+////
+//// ```gleam
+//// remote.call(remote.cluster(), users_api.get_user(), 42, timeout: 5000)
+//// |> remote.respond(ctx, users_api.user_to_json)
+//// ```
+////
+//// `remote.cluster()` asks any connected node that serves the procedure,
+//// `remote.node("users@10.0.0.5")` one node, and
+//// `remote.http("https://users.internal/rpc", token: secret)` a service
+//// over HTTP.
+
+import dot_env/env
+import howdy/controller.{type Controller}
+import howdy/remote
+import {{.Name}}/procedures
+
+/// Every procedure this app serves, with the function that answers it. A
+/// handler returns a `service.Result`, as controllers use, so one function
+/// can back both a route and a procedure.
+pub fn server() -> remote.Server {
+  remote.server()
+  |> remote.handle(procedures.ping(), fn(text) { Ok(text) })
+}
+
+/// Offer the procedures to every connected node, and to this one. Call once
+/// at startup; restart `gleam dev` after changing them, as the cluster keeps
+/// the server it started with.
+pub fn start() -> Nil {
+  let assert Ok(_) = remote.start(server())
+  Nil
+}
+
+/// The token callers of /rpc must send, from `RPC_TOKEN`. Unset, it is
+/// empty, and /rpc refuses every request.
+pub fn token() -> String {
+  env.get_string_or("RPC_TOKEN", "")
+}
+
+/// `POST /rpc/<procedure name>` for each procedure in `server`, for callers
+/// that send `token`.
+pub fn controller(token: String) -> Controller {
+  remote.controller(server(), at: "/rpc", token:)
+}
