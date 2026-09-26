@@ -1,8 +1,24 @@
 //// The {{.ControllerTitle}} pages, under `/{{.Prefix}}`. Add another with
 //// `howdy create page {{.Controller}} <name>` or `howdy create live_page {{.Controller}} <name>`.
+{{- if .Auth}}
+//// Every route needs someone signed in, or it answers 401; `ctx.guard.user`
+//// is the signed-in user. New routes go before `controller.build`.
+{{- end}}
+
+{{- if .Auth}}
+
+import howdy/auth.{type Auth}
+import howdy/controller
+
+pub fn controller(identity: Auth) {
+  controller.guarded("{{.Prefix}}", auth.required(identity))
+  |> controller.build
+}
+{{- else}}
 
 import howdy/controller
 
 pub fn controller() {
   controller.new("{{.Prefix}}")
 }
+{{- end}}

@@ -11,7 +11,7 @@ import gleam/list
 import gleam/result
 import gleam/string
 import gleam/uri
-import howdy/controller.{type Context}
+import howdy/controller.{type GuardedContext}
 import howdy/service
 import howdy/ui
 import howdy/ui/button
@@ -27,7 +27,7 @@ pub type Form =
 
 /// An error as a page, with the status that fits it: 404 for a missing
 /// record, 500 for a database failure and so on.
-pub fn error(ctx: Context, error: service.Error) {
+pub fn error(ctx: GuardedContext(guarded), error: service.Error) {
   default_layout.render(ctx, "Something went wrong", [
     ui.h1("Something went wrong"),
     ui.card([], [
@@ -39,7 +39,7 @@ pub fn error(ctx: Context, error: service.Error) {
 }
 
 /// Send the browser to another page after a successful form post.
-pub fn redirect(ctx: Context, to path: String) {
+pub fn redirect(ctx: GuardedContext(guarded), to path: String) {
   controller.status(ctx, 303)
   |> response.set_header("location", path)
 }
@@ -118,7 +118,7 @@ fn field_error(errors: List(service.FieldError), name: String) -> Element(msg) {
 
 /// Read a posted `application/x-www-form-urlencoded` body, up to 64 KB, and
 /// continue with its fields: `use form <- pages.read_form(ctx)`.
-pub fn read_form(ctx: Context, next) {
+pub fn read_form(ctx: GuardedContext(guarded), next) {
   let form =
     controller.read_body(ctx, limit: 65_536)
     |> result.replace_error(Nil)

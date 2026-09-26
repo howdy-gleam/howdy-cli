@@ -34,10 +34,10 @@ func TestAPIProjectRefusesPages(t *testing.T) {
 		t.Error("a project with howdy_ui should not be API only")
 	}
 	for what, err := range map[string]error{
-		"page":           second(NewPage(p, "blog", "about", false, "")),
-		"live page":      second(NewPage(p, "blog", "editor", true, "")),
-		"component":      second(NewComponent(p, "", "price_tag", false)),
-		"live component": second(NewComponent(p, "", "feed", true)),
+		"page":           second(NewPage(p, "blog", "about", false, "", false)),
+		"live page":      second(NewPage(p, "blog", "editor", true, "", false)),
+		"component":      second(NewComponent(p, "", "price_tag", false, false)),
+		"live component": second(NewComponent(p, "", "feed", true, false)),
 		"layout":         second(NewLayout(p, "admin")),
 		"pages":          p.NeedsPages("pages"),
 	} {

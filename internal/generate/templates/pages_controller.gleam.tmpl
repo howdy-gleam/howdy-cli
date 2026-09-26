@@ -13,9 +13,16 @@
 //// | POST | `/{{.Plural}}/:id/delete` | Delete, then back to the table |
 ////
 //// HTML forms can only GET and POST, hence POST for update and delete.
+{{- if .Auth}}
+//// Every route needs someone signed in, or it answers 401; `ctx.guard.user`
+//// is the signed-in user.
+{{- end}}
 //// Add another page with `howdy create page {{.Plural}} <name>`.
 
 import gloo/repo.{type Repo}
+{{- if .Auth}}
+import howdy/auth.{type Auth}
+{{- end}}
 import howdy/controller
 import howdy/param
 import {{.Project.Name}}/platform/pages
@@ -26,8 +33,13 @@ import {{.Project.Name}}/{{.Plural}}/pages/new_page
 import {{.Project.Name}}/{{.Plural}}/pages/show_page
 import {{.Project.Name}}/{{.Plural}}/{{.Plural}}
 
+{{- if .Auth}}
+pub fn controller(db: Repo, identity: Auth) {
+  controller.guarded("{{.Plural}}", auth.required(identity))
+{{- else}}
 pub fn controller(db: Repo) {
   controller.new("{{.Plural}}")
+{{- end}}
   |> controller.get("/", fn(ctx) {
     case {{.Plural}}.all(db) {
       Ok(items) -> index_page.show(ctx, items)
@@ -82,4 +94,7 @@ pub fn controller(db: Repo) {
       Error(error) -> pages.error(ctx, error)
     }
   })
+{{- if .Auth}}
+  |> controller.build
+{{- end}}
 }

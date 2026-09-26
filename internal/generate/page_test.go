@@ -29,7 +29,7 @@ func opened(t *testing.T, database scaffold.Database) *Project {
 
 func createPage(t *testing.T, p *Project, controller, name string, live bool) *Page {
 	t.Helper()
-	pg, err := NewPage(p, controller, name, live, "")
+	pg, err := NewPage(p, controller, name, live, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -145,7 +145,7 @@ func TestPageRefusesDuplicates(t *testing.T) {
 		// home is routed by the site controller but has no page file.
 		{"site", "index", false, "the site controller already has a page at /, which is where an index page goes"},
 	} {
-		_, err := NewPage(p, c.controller, c.name, c.live, "")
+		_, err := NewPage(p, c.controller, c.name, c.live, "", false)
 		if err == nil || !strings.Contains(err.Error(), c.want) {
 			t.Errorf("%s %s: got %v, want %q", c.controller, c.name, err, c.want)
 		}
@@ -153,7 +153,7 @@ func TestPageRefusesDuplicates(t *testing.T) {
 	// A route added by hand counts too.
 	path := filepath.Join(p.Dir, "src/demo_site/blog/blog_controller.gleam")
 	os.WriteFile(path, []byte(strings.Replace(before, "\n}", "\n|> controller.get(\"/faq\", fn(ctx) { todo })\n}", 1)), 0o644)
-	if _, err := NewPage(p, "blog", "faq", false, ""); err == nil || !strings.Contains(err.Error(), "/blog/faq") {
+	if _, err := NewPage(p, "blog", "faq", false, "", false); err == nil || !strings.Contains(err.Error(), "/blog/faq") {
 		t.Errorf("got %v", err)
 	}
 }
@@ -161,7 +161,7 @@ func TestPageRefusesDuplicates(t *testing.T) {
 func TestPageValidatesNames(t *testing.T) {
 	p := opened(t, scaffold.NoDatabase)
 	for _, bad := range [][2]string{{"Blog", "about"}, {"blog", "About"}, {"blog", "about-us"}, {"type", "about"}, {"", "about"}} {
-		if _, err := NewPage(p, bad[0], bad[1], false, ""); err == nil {
+		if _, err := NewPage(p, bad[0], bad[1], false, "", false); err == nil {
 			t.Errorf("%v should be rejected", bad)
 		}
 	}
@@ -202,7 +202,7 @@ func TestPageJoinsPagesController(t *testing.T) {
 	if strings.Contains(read(t, p, "src/demo_site/users/users_api_controller.gleam"), "stats_page") {
 		t.Error("the page should not be added to the JSON controller")
 	}
-	if _, err := NewPage(p, "users", "index", false, ""); err == nil {
+	if _, err := NewPage(p, "users", "index", false, "", false); err == nil {
 		t.Error("the pages controller already has an index at /users")
 	}
 }
@@ -212,7 +212,7 @@ func TestPageLayouts(t *testing.T) {
 	if got := p.Layouts(); len(got) != 1 || got[0] != "default" {
 		t.Fatalf("a new project should have the default layout, got %v", got)
 	}
-	if _, err := NewPage(p, "admin", "index", false, "admin"); err == nil ||
+	if _, err := NewPage(p, "admin", "index", false, "admin", false); err == nil ||
 		!strings.Contains(err.Error(), "there is no admin layout") || !strings.Contains(err.Error(), "the project has: default") {
 		t.Errorf("an unknown layout should be refused, got %v", err)
 	}
@@ -234,7 +234,7 @@ func TestPageLayouts(t *testing.T) {
 		t.Errorf("a layout should not be created twice, got %v", err)
 	}
 
-	stats, err := NewPage(p, "admin", "stats", false, "admin")
+	stats, err := NewPage(p, "admin", "stats", false, "admin", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -253,7 +253,7 @@ func TestDefaultLayoutWrittenWhenMissing(t *testing.T) {
 	p := opened(t, scaffold.NoDatabase)
 	path := filepath.Join(p.Dir, p.LayoutFile("default"))
 	os.Remove(path)
-	pg, err := NewPage(p, "blog", "about", false, "")
+	pg, err := NewPage(p, "blog", "about", false, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -265,7 +265,7 @@ func TestDefaultLayoutWrittenWhenMissing(t *testing.T) {
 		t.Errorf("the default layout should be written, wrote %v", written)
 	}
 	os.WriteFile(path, []byte("// mine\n"), 0o644)
-	pg, _ = NewPage(p, "blog", "faq", false, "")
+	pg, _ = NewPage(p, "blog", "faq", false, "", false)
 	if _, err := pg.Write(); err != nil {
 		t.Fatal(err)
 	}
@@ -277,7 +277,7 @@ func TestDefaultLayoutWrittenWhenMissing(t *testing.T) {
 func TestFeaturesCannotUseProjectFolders(t *testing.T) {
 	p := opened(t, scaffold.SQLite)
 	for _, name := range []string{"layouts", "platform", "migrations"} {
-		if _, err := NewPage(p, name, "about", false, ""); err == nil {
+		if _, err := NewPage(p, name, "about", false, "", false); err == nil {
 			t.Errorf("a controller called %s should be refused", name)
 		}
 		if _, err := NewSlice(p, name, "thing", []string{"name"}); err == nil {

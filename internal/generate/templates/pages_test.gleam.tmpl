@@ -21,48 +21,69 @@ fn changed() -> List(#(String, String)) {
 
 pub fn pages_lifecycle_test() {
   use db <- support.with_db()
-  let app = support.app(db)
+  {{- template "send" $}}
 
-  let empty = testing.get("/{{.Plural}}") |> testing.send(app)
+  let empty = testing.get("/{{.Plural}}") |> send
   assert empty.status == 200
   assert string.contains(testing.text(empty), "Nothing here yet.")
-  assert testing.send(testing.get("/{{.Plural}}/new"), app).status == 200
+  assert send(testing.get("/{{.Plural}}/new")).status == 200
 
-  let created = submit("/{{.Plural}}", first()) |> testing.send(app)
+  let created = submit("/{{.Plural}}", first()) |> send
   assert created.status == 303
   assert response.get_header(created, "location") == Ok("/{{.Plural}}/1")
 
-  let shown = testing.get("/{{.Plural}}/1") |> testing.send(app)
+  let shown = testing.get("/{{.Plural}}/1") |> send
   assert shown.status == 200
   assert string.contains(testing.text(shown), "{{.Probe.Shown false}}")
-  let listed = testing.get("/{{.Plural}}") |> testing.send(app)
+  let listed = testing.get("/{{.Plural}}") |> send
   assert string.contains(testing.text(listed), "{{.Probe.Shown false}}")
 
   // The edit form starts from the stored values.
-  let editing = testing.get("/{{.Plural}}/1/edit") |> testing.send(app)
+  let editing = testing.get("/{{.Plural}}/1/edit") |> send
   assert editing.status == 200
   assert string.contains(testing.text(editing), "{{.Probe.InForm}}")
 
-  let updated = submit("/{{.Plural}}/1", changed()) |> testing.send(app)
+  let updated = submit("/{{.Plural}}/1", changed()) |> send
   assert updated.status == 303
-  let shown = testing.get("/{{.Plural}}/1") |> testing.send(app)
+  let shown = testing.get("/{{.Plural}}/1") |> send
   assert string.contains(testing.text(shown), "{{.Probe.Shown true}}")
 
-  let deleted = submit("/{{.Plural}}/1/delete", []) |> testing.send(app)
+  let deleted = submit("/{{.Plural}}/1/delete", []) |> send
   assert deleted.status == 303
   assert response.get_header(deleted, "location") == Ok("/{{.Plural}}")
-  assert testing.send(testing.get("/{{.Plural}}/1"), app).status == 404
-  assert testing.send(submit("/{{.Plural}}/1", changed()), app).status == 404
+  assert send(testing.get("/{{.Plural}}/1")).status == 404
+  assert send(submit("/{{.Plural}}/1", changed())).status == 404
 }
 {{with .Invalid}}
 pub fn invalid_form_is_shown_again_test() {
   use db <- support.with_db()
-  let app = support.app(db)
-  let res = submit("/{{$.Plural}}", [{{.Pairs}}]) |> testing.send(app)
+  {{- template "send" $}}
+  let res = submit("/{{$.Plural}}", [{{.Pairs}}]) |> send
   assert res.status == 422
   assert string.contains(testing.text(res), "role=\"alert\"")
   // Nothing was stored.
-  let listed = testing.get("/{{$.Plural}}") |> testing.send(app)
+  let listed = testing.get("/{{$.Plural}}") |> send
   assert string.contains(testing.text(listed), "Nothing here yet.")
 }
 {{end}}
+{{- if .Auth}}
+
+pub fn signing_in_is_required_test() {
+  use db <- support.with_db()
+  let res = testing.get("/{{.Plural}}") |> testing.send(support.app(db))
+  assert res.status == 401
+}
+{{- end}}
+{{- define "send"}}
+  let app = support.app(db)
+{{- if .Auth}}
+  let token = support.sign_in(db)
+  let send = fn(req) {
+    req
+    |> testing.header("authorization", "Bearer " <> token)
+    |> testing.send(app)
+  }
+{{- else}}
+  let send = testing.send(_, app)
+{{- end}}
+{{- end}}

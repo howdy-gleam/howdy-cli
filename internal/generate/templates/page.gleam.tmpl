@@ -1,12 +1,12 @@
 //// The {{.Title}} page, at `{{.URL}}`. Everything around its content comes
 //// from `layouts/{{.LayoutModule}}.gleam`.
 
-import howdy/controller.{type Context}
+import howdy/controller.{type GuardedContext}
 import howdy/ui
 import lustre/element.{text}
 import {{.Project.Name}}/layouts/{{.LayoutModule}}
 
-pub fn show(ctx: Context) {
+pub fn show(ctx: GuardedContext(guarded)) {
   {{.LayoutModule}}.render(ctx, "{{.Title}}", [
     ui.h1("{{.Title}}"),
     ui.p([text("Add this page's content in {{.File}}.")]),

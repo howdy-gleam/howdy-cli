@@ -33,6 +33,9 @@ type Project struct {
 	// API reports a project made with 'howdy new --api-only': it has no
 	// howdy_ui, so no pages, layouts or components.
 	API bool
+	// Auth reports whether the project depends on howdy_auth, which
+	// 'howdy add auth' adds with an identity in the app's services.
+	Auth bool
 }
 
 var (
@@ -69,6 +72,7 @@ func Open(dir string) (*Project, error) {
 		Dir: dir, Name: string(m[1]),
 		HowdyDatabase: dependency("howdy_database").Match(toml),
 		API:           !dependency("howdy_ui").Match(toml),
+		Auth:          dependency("howdy_auth").Match(toml),
 	}
 	switch {
 	case !dependency("gloo").Match(toml):
@@ -101,6 +105,9 @@ type Slice struct {
 	MigrationOnly bool
 	// Layout names the layout the pages render through, "" for the default.
 	Layout string
+	// Auth guards every route of the controllers with the app's identity,
+	// so only someone signed in reaches them.
+	Auth bool
 	// Version is the migration version, one above the highest in the project.
 	Version int
 }
@@ -197,6 +204,15 @@ func (p *Project) NeedsPages(what string) error {
 	return fmt.Errorf("this project is API only (made with --api-only, it has no howdy_ui in gleam.toml), so it has no %s; use 'howdy create controller' for a JSON API", what)
 }
 
+// NeedsAuth refuses --add-auth in a project without Howdy Auth, whose
+// identity in the app's services the guard checks.
+func (p *Project) NeedsAuth() error {
+	if p.Auth {
+		return nil
+	}
+	return errors.New("--add-auth guards the routes with Howdy Auth, which this project does not have (no howdy_auth in gleam.toml); run 'howdy add auth' first")
+}
+
 // projectFolder refuses a name whose folder under src/<project>/ holds the
 // project's own code rather than a feature.
 func (p *Project) projectFolder(name string) error {
@@ -278,7 +294,11 @@ func (p *Project) nextMigrationVersion() (int, error) {
 	return highest + 1, nil
 }
 
-var funcs = template.FuncMap{"inc": func(i int) int { return i + 1 }}
+var funcs = template.FuncMap{
+	"inc": func(i int) int { return i + 1 },
+	// list passes several values to a {{template}}.
+	"list": func(values ...any) []any { return values },
+}
 
 // File is a rendered file, with a path relative to the project directory.
 type File struct {
@@ -355,16 +375,25 @@ func (c *Slice) Files() ([]File, error) {
 }
 
 // Write creates the files, refusing to replace any that exist, except that
-// shared files already in the project are kept, and adds the pages' styles
-// to style.css if it does not have them. It returns the paths written.
+// shared files already in the project are kept, adds the pages' styles to
+// style.css if it does not have them, and for guarded controllers adds
+// sign_in to the test support. It returns the paths written.
 func (c *Slice) Write() ([]string, error) {
 	files, err := c.Files()
 	if err != nil {
 		return nil, err
 	}
 	written, err := writeFiles(c.Project.Dir, files)
-	if err != nil || !c.Pages {
+	if err != nil {
 		return written, err
+	}
+	if c.Auth && (c.Routes || c.Pages) {
+		if written, err = c.Project.addSignIn(written); err != nil || !c.Pages {
+			return written, err
+		}
+	}
+	if !c.Pages {
+		return written, nil
 	}
 	changed, err := c.Project.pageStyles()
 	if changed {

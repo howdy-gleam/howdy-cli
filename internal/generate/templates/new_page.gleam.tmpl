@@ -2,7 +2,7 @@
 //// again with the errors when what was submitted is not valid.
 
 import gleam/list
-import howdy/controller.{type Context}
+import howdy/controller.{type GuardedContext}
 import howdy/service
 import howdy/ui
 import howdy/ui/button
@@ -13,7 +13,7 @@ import {{.Project.Name}}/layouts/{{.LayoutModule}}
 import {{.Project.Name}}/platform/pages
 import {{.Project.Name}}/{{.Plural}}/pages/helpers
 
-pub fn show(ctx: Context, form: pages.Form, errors: List(service.FieldError)) {
+pub fn show(ctx: GuardedContext(guarded), form: pages.Form, errors: List(service.FieldError)) {
   {{.LayoutModule}}.render(ctx, "New {{.Label}}", [
     ui.h1("New {{.Label}}"),
     ui.card([], [

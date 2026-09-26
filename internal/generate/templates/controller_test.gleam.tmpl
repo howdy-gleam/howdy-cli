@@ -22,56 +22,78 @@ fn changed() -> json.Json {
 
 pub fn full_http_lifecycle_test() {
   use db <- support.with_db()
-  let app = support.app(db)
+  {{- template "send" $}}
 
-  let created = testing.post("/api/{{.Plural}}", first()) |> testing.send(app)
+  let created = testing.post("/api/{{.Plural}}", first()) |> send
   assert created.status == 201
   let assert Ok(item) = testing.json(created, {{.Singular}}.decoder())
 {{- range .Fields}}
   assert item.{{.Name}} == {{.SampleGleam}}
 {{- end}}
 
-  let fetched = testing.get("/api/{{.Plural}}/1") |> testing.send(app)
+  let fetched = testing.get("/api/{{.Plural}}/1") |> send
   assert testing.json(fetched, {{.Singular}}.decoder()) == Ok(item)
 
-  let updated = testing.put("/api/{{.Plural}}/1", changed()) |> testing.send(app)
+  let updated = testing.put("/api/{{.Plural}}/1", changed()) |> send
   assert updated.status == 200
   let assert Ok(item) = testing.json(updated, {{.Singular}}.decoder())
 {{- range .Fields}}
   assert item.{{.Name}} == {{.ChangedGleam}}
 {{- end}}
 
-  let listed = testing.get("/api/{{.Plural}}") |> testing.send(app)
+  let listed = testing.get("/api/{{.Plural}}") |> send
   assert testing.json(listed, decode.list({{.Singular}}.decoder())) == Ok([item])
 
-  let deleted = testing.delete("/api/{{.Plural}}/1") |> testing.send(app)
+  let deleted = testing.delete("/api/{{.Plural}}/1") |> send
   assert deleted.status == 204
-  assert testing.send(testing.get("/api/{{.Plural}}/1"), app).status == 404
-  assert testing.send(testing.put("/api/{{.Plural}}/1", first()), app).status == 404
-  assert testing.send(testing.delete("/api/{{.Plural}}/1"), app).status == 404
+  assert send(testing.get("/api/{{.Plural}}/1")).status == 404
+  assert send(testing.put("/api/{{.Plural}}/1", first())).status == 404
+  assert send(testing.delete("/api/{{.Plural}}/1")).status == 404
 }
 
 pub fn bad_ids_and_bodies_are_rejected_test() {
   use db <- support.with_db()
-  let app = support.app(db)
-  assert testing.send(testing.get("/api/{{.Plural}}/abc"), app).status == 400
+  {{- template "send" $}}
+  assert send(testing.get("/api/{{.Plural}}/abc")).status == 400
   let res =
     testing.post("/api/{{.Plural}}", json.object([#("nope", json.int(1))]))
-    |> testing.send(app)
+    |> send
   assert res.status == 400
 }
 {{with .FirstString}}
 pub fn blank_{{.Name}}_is_rejected_test() {
   use db <- support.with_db()
+  {{- template "send" $}}
   let blank =
     json.object([
 {{- range $.Fields}}
       #("{{.Name}}", {{if eq .Name $.FirstString.Name}}json.string("  "){{else}}{{.Sample}}{{end}}),
 {{- end}}
     ])
-  let res = testing.post("/api/{{$.Plural}}", blank) |> testing.send(support.app(db))
+  let res = testing.post("/api/{{$.Plural}}", blank) |> send
   assert res.status == 422
   let assert Ok([error]) = testing.field_errors(res)
   assert error.field == "{{.Name}}"
 }
 {{end}}
+{{- if .Auth}}
+
+pub fn signing_in_is_required_test() {
+  use db <- support.with_db()
+  let res = testing.get("/api/{{.Plural}}") |> testing.send(support.app(db))
+  assert res.status == 401
+}
+{{- end}}
+{{- define "send"}}
+  let app = support.app(db)
+{{- if .Auth}}
+  let token = support.sign_in(db)
+  let send = fn(req) {
+    req
+    |> testing.header("authorization", "Bearer " <> token)
+    |> testing.send(app)
+  }
+{{- else}}
+  let send = testing.send(_, app)
+{{- end}}
+{{- end}}

@@ -29,6 +29,9 @@ type Component struct {
 	Prefix string
 	// Exists reports whether that controller is already in the project.
 	Exists bool
+	// Auth reports whether that controller guards its routes with Howdy
+	// Auth: a new one made with --add-auth, or an existing guarded one.
+	Auth bool
 }
 
 // globalComponents is the folder of global components, and the controller
@@ -37,7 +40,9 @@ const globalComponents = "components"
 
 // NewComponent validates the names, checks that a controller's component
 // belongs to a controller that exists, and that the component does not.
-func NewComponent(p *Project, controller, name string, live bool) (*Component, error) {
+// addAuth is --add-auth, which guards the global components controller when
+// a live component creates it.
+func NewComponent(p *Project, controller, name string, live, addAuth bool) (*Component, error) {
 	if err := p.NeedsPages("components"); err != nil {
 		return nil, err
 	}
@@ -63,6 +68,9 @@ func NewComponent(p *Project, controller, name string, live bool) (*Component, e
 		return nil, fmt.Errorf("the %s component already exists among %s components: %s; pick another name, or edit that component", name, where, c.File())
 	}
 	if !live {
+		if addAuth {
+			return nil, errors.New("--add-auth guards the routes of a live component's controller, and a component that is not live has none")
+		}
 		return c, nil
 	}
 	src, err := os.ReadFile(filepath.Join(p.Dir, c.ControllerFile()))
@@ -76,6 +84,9 @@ func NewComponent(p *Project, controller, name string, live bool) (*Component, e
 			return nil, fmt.Errorf("%s already has a route at %s; pick another name", c.ControllerFile(), c.URL())
 		}
 	case !errors.Is(err, os.ErrNotExist):
+		return nil, err
+	}
+	if c.Auth, err = p.guarded(c.ControllerFile(), src, c.Exists, addAuth); err != nil {
 		return nil, err
 	}
 	return c, nil
@@ -180,14 +191,19 @@ func (c *Component) Files() ([]File, error) {
 	return files, nil
 }
 
-// Write creates the files, refusing to replace any that exist. It returns
-// the paths written.
+// Write creates the files, refusing to replace any that exist, and for a
+// guarded controller adds sign_in to the test support. It returns the paths
+// written.
 func (c *Component) Write() ([]string, error) {
 	files, err := c.Files()
 	if err != nil {
 		return nil, err
 	}
-	return writeFiles(c.Project.Dir, files)
+	written, err := writeFiles(c.Project.Dir, files)
+	if err != nil || !c.Auth {
+		return written, err
+	}
+	return c.Project.addSignIn(written)
 }
 
 // Register routes a live component's socket in its controller and, for the
@@ -211,14 +227,18 @@ func (c *Component) Register() (notes []string) {
 	}
 	root := filepath.Join("src", p.Name+".gleam")
 	module := "components_controller"
+	controller := module + ".controller()"
+	if c.Auth {
+		controller = module + ".controller(services.identity)"
+	}
 	err := edit(filepath.Join(p.Dir, root),
 		fmt.Sprintf("import %s/%s/%s", p.Name, globalComponents, module),
 		regexp.MustCompile(`(?m)^(\s*)howdy\.new\(\)\n`),
-		"${0}${1}|> howdy.controller("+module+".controller())\n",
+		"${0}${1}|> howdy.controller("+controller+")\n",
 	)
 	if err != nil {
-		notes = append(notes, fmt.Sprintf("Register the controller in %s: import %s/%s/%s and add |> howdy.controller(%s.controller()) before the static controller.",
-			root, p.Name, globalComponents, module, module))
+		notes = append(notes, fmt.Sprintf("Register the controller in %s: import %s/%s/%s and add |> howdy.controller(%s) before the static controller.",
+			root, p.Name, globalComponents, module, controller))
 	}
 	return notes
 }

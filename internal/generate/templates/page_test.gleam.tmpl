@@ -7,28 +7,39 @@ import {{.Project.Name}}
 {{- end}}
 
 pub fn {{.Module}}_test() {
-{{- if .HasDatabase}}
-  use db <- support.with_db()
-  let res = testing.get("{{.URL}}") |> testing.send(support.app(db))
-{{- else if .HasSupport}}
-  let res = testing.get("{{.URL}}") |> testing.send(support.app())
-{{- else}}
-  let res = testing.get("{{.URL}}") |> testing.send({{.Project.Name}}.app())
-{{- end}}
+{{- template "get" (list $ .URL)}}
   assert res.status == 200
   assert string.contains(testing.text(res), "{{.Title}}")
 }
 {{- if .Live}}
 
 pub fn {{.Module}}_socket_requires_websocket_test() {
-{{- if .HasDatabase}}
-  use db <- support.with_db()
-  let res = testing.get("{{.SocketURL}}") |> testing.send(support.app(db))
-{{- else if .HasSupport}}
-  let res = testing.get("{{.SocketURL}}") |> testing.send(support.app())
-{{- else}}
-  let res = testing.get("{{.SocketURL}}") |> testing.send({{.Project.Name}}.app())
-{{- end}}
+{{- template "get" (list $ .SocketURL)}}
   assert res.status == 426
 }
+{{- end}}
+{{- if .Auth}}
+
+pub fn {{.Module}}_requires_signing_in_test() {
+  use db <- support.with_db()
+  let res = testing.get("{{.URL}}") |> testing.send(support.app(db))
+  assert res.status == 401
+}
+{{- end}}
+{{- define "get"}}
+{{- $pg := index . 0}}{{$path := index . 1}}
+{{- if $pg.Auth}}
+  use db <- support.with_db()
+  let res =
+    testing.get("{{$path}}")
+    |> testing.header("authorization", "Bearer " <> support.sign_in(db))
+    |> testing.send(support.app(db))
+{{- else if $pg.HasDatabase}}
+  use db <- support.with_db()
+  let res = testing.get("{{$path}}") |> testing.send(support.app(db))
+{{- else if $pg.HasSupport}}
+  let res = testing.get("{{$path}}") |> testing.send(support.app())
+{{- else}}
+  let res = testing.get("{{$path}}") |> testing.send({{$pg.Project.Name}}.app())
+{{- end}}
 {{- end}}

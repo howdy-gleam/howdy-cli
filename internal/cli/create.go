@@ -108,7 +108,7 @@ func runCreateEmail(name string, plain bool) error {
 }
 
 func createComponentCommand(live bool) *cobra.Command {
-	var plain bool
+	var plain, addAuth bool
 	cmd := &cobra.Command{
 		Use:   "component [controller] <name>",
 		Short: "Create a component, a piece of view to reuse on pages",
@@ -127,7 +127,7 @@ that it renders is written beside the other tests.`,
 			if len(args) == 2 {
 				controller, name = args[0], args[1]
 			}
-			return runCreateComponent(controller, name, live, plain)
+			return runCreateComponent(controller, name, live, addAuth, plain)
 		},
 	}
 	if live {
@@ -148,14 +148,21 @@ which the first global live component creates and registers in
 src/<project>.gleam.
 
 A component that already exists is refused and nothing is written. A test
-that it mounts and serves its socket is written beside the other tests.`
-		cmd.Example = "  howdy create live_component notifications\n  howdy create live_component blog comments"
+that it mounts and serves its socket is written beside the other tests.
+
+With --add-auth, the components controller the first global live component
+creates guards every route with Howdy Auth, so only someone signed in
+reaches them; the project needs 'howdy add auth' first. A controller that
+exists keeps its guard, or lack of one, and --add-auth is refused for one
+without.`
+		cmd.Example = "  howdy create live_component notifications\n  howdy create live_component blog comments\n  howdy create live_component notifications --add-auth"
+		cmd.Flags().BoolVar(&addAuth, "add-auth", false, "guard the components controller it creates with Howdy Auth, so only someone signed in reaches it (needs 'howdy add auth')")
 	}
 	cmd.Flags().BoolVar(&plain, "plain", false, "print progress as plain lines instead of animating")
 	return cmd
 }
 
-func runCreateComponent(controller, name string, live, plain bool) error {
+func runCreateComponent(controller, name string, live, addAuth, plain bool) error {
 	dir, err := findProjectDir()
 	if err != nil {
 		return err
@@ -164,7 +171,7 @@ func runCreateComponent(controller, name string, live, plain bool) error {
 	if err != nil {
 		return err
 	}
-	component, err := generate.NewComponent(project, controller, name, live)
+	component, err := generate.NewComponent(project, controller, name, live, addAuth)
 	if err != nil {
 		return err
 	}
@@ -297,7 +304,7 @@ func runCreateLayout(name string, plain bool) error {
 }
 
 func createPageCommand(live bool) *cobra.Command {
-	var plain bool
+	var plain, addAuth bool
 	var layout string
 	cmd := &cobra.Command{
 		Use:   "page <controller> <page>",
@@ -312,11 +319,16 @@ src/<project>.gleam. If it does, the page is added to it and served under
 whatever path the controller already uses. A page that already exists, or
 a route the controller already has, is refused and nothing is written.
 
-A test that the page responds is written to test/<project>/<controller>/pages/.`,
-		Example: "  howdy create page blog about\n  howdy create page blog index\n  howdy create page site contact\n  howdy create page admin index --layout admin",
+A test that the page responds is written to test/<project>/<controller>/pages/.
+
+With --add-auth, a controller it creates guards every route with Howdy
+Auth, so only someone signed in reaches them; the project needs 'howdy add
+auth' first. A controller that exists keeps its guard, or lack of one, and
+--add-auth is refused for one without.`,
+		Example: "  howdy create page blog about\n  howdy create page blog index\n  howdy create page site contact\n  howdy create page admin index --layout admin\n  howdy create page account index --add-auth",
 		Args:    cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runCreatePage(args[0], args[1], live, layout, plain)
+			return runCreatePage(args[0], args[1], live, layout, addAuth, plain)
 		},
 	}
 	if live {
@@ -335,15 +347,21 @@ src/<project>.gleam. If it does, the page is added to it and served under
 whatever path the controller already uses. A page that already exists, or
 a route the controller already has, is refused and nothing is written.
 
-A test that the page responds is written to test/<project>/<controller>/pages/.`
+A test that the page responds is written to test/<project>/<controller>/pages/.
+
+With --add-auth, a controller it creates guards every route with Howdy
+Auth, so only someone signed in reaches them; the project needs 'howdy add
+auth' first. A controller that exists keeps its guard, or lack of one, and
+--add-auth is refused for one without.`
 		cmd.Example = "  howdy create live_page dashboard index\n  howdy create live_page blog editor\n  howdy create live_page admin board --layout admin"
 	}
 	cmd.Flags().StringVar(&layout, "layout", "", "render the page through this layout from src/<project>/layouts/ instead of the default")
+	cmd.Flags().BoolVar(&addAuth, "add-auth", false, "guard the controller it creates with Howdy Auth, so only someone signed in reaches its pages (needs 'howdy add auth')")
 	cmd.Flags().BoolVar(&plain, "plain", false, "print progress as plain lines instead of animating")
 	return cmd
 }
 
-func runCreatePage(controller, name string, live bool, layout string, plain bool) error {
+func runCreatePage(controller, name string, live bool, layout string, addAuth, plain bool) error {
 	dir, err := findProjectDir()
 	if err != nil {
 		return err
@@ -352,7 +370,7 @@ func runCreatePage(controller, name string, live bool, layout string, plain bool
 	if err != nil {
 		return err
 	}
-	page, err := generate.NewPage(project, controller, name, live, layout)
+	page, err := generate.NewPage(project, controller, name, live, layout, addAuth)
 	if err != nil {
 		return err
 	}
@@ -409,6 +427,9 @@ func runCreatePage(controller, name string, live bool, layout string, plain bool
 	if !page.Exists {
 		notes = append(notes, fmt.Sprintf("The new %s controller is registered in src/%s.gleam.", controller, project.Name))
 	}
+	if page.Auth {
+		notes = append(notes, fmt.Sprintf("Only someone signed in reaches %s; ctx.guard.user is the signed-in user.", page.URL()))
+	}
 	notes = append(notes, fmt.Sprintf("Add the page's content in %s. It renders through %s.", page.File(), project.LayoutFile(page.Layout)))
 	fmt.Print(tui.NextSteps(page.Module(), []tui.Command{
 		{Cmd: "gleam dev", Note: "then open http://127.0.0.1:8787" + page.URL()},
@@ -418,7 +439,7 @@ func runCreatePage(controller, name string, live bool, layout string, plain bool
 }
 
 func createControllerCommand() *cobra.Command {
-	var plain bool
+	var plain, addAuth bool
 	cmd := &cobra.Command{
 		Use:   "controller <plural> <singular> <field:type>...",
 		Short: "Create a JSON controller with its record, database operations and migration",
@@ -441,13 +462,18 @@ migration in platform/database.gleam. The project must have a database;
 SQLite or PostgreSQL is detected from gleam.toml.
 
 Fields are name:type pairs. Types are string, int, float and bool; a bare
-name is a string. Every record also gets an integer id.`,
-		Example: "  howdy create controller users user name:string age:int\n  howdy create controller blog_posts blog_post title body:string published:bool",
+name is a string. Every record also gets an integer id.
+
+With --add-auth, every route is guarded with Howdy Auth and answers 401 to
+anyone not signed in; the project needs 'howdy add auth' first. The
+controller takes the app's identity, and its tests sign in.`,
+		Example: "  howdy create controller users user name:string age:int\n  howdy create controller blog_posts blog_post title body:string published:bool\n  howdy create controller notes note body --add-auth",
 		Args:    cobra.MinimumNArgs(3),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runCreateSlice("controller", args[0], args[1], args[2:], "", plain)
+			return runCreateSlice("controller", args[0], args[1], args[2:], "", addAuth, plain)
 		},
 	}
+	cmd.Flags().BoolVar(&addAuth, "add-auth", false, "guard every route with Howdy Auth, so only someone signed in reaches them (needs 'howdy add auth')")
 	cmd.Flags().BoolVar(&plain, "plain", false, "print progress as plain lines instead of animating")
 	return cmd
 }
@@ -474,7 +500,7 @@ name is a string. Every record also gets an integer id.`,
 		Example: "  howdy create repo users user name:string email:string age:int",
 		Args:    cobra.MinimumNArgs(3),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runCreateSlice("repo", args[0], args[1], args[2:], "", plain)
+			return runCreateSlice("repo", args[0], args[1], args[2:], "", false, plain)
 		},
 	}
 	cmd.Flags().BoolVar(&plain, "plain", false, "print progress as plain lines instead of animating")
@@ -482,7 +508,7 @@ name is a string. Every record also gets an integer id.`,
 }
 
 func createPagesCommand() *cobra.Command {
-	var plain, api bool
+	var plain, api, addAuth bool
 	var layout string
 	cmd := &cobra.Command{
 		Use:   "pages <plural> <singular> <field:type>...",
@@ -522,18 +548,24 @@ is then called <plural>_api_controller.gleam. 'howdy create page <plural>
 <name>' adds another page to the same controller.
 
 Fields are name:type pairs. Types are string, int, float and bool; a bare
-name is a string. Every record also gets an integer id.`,
-		Example: "  howdy create pages users user name:string age:int\n  howdy create pages blog_posts blog_post title body published:bool --api",
+name is a string. Every record also gets an integer id.
+
+With --add-auth, every route, and with --api the JSON ones too, is guarded
+with Howdy Auth and answers 401 to anyone not signed in; the project needs
+'howdy add auth' first. The controllers take the app's identity, and their
+tests sign in.`,
+		Example: "  howdy create pages users user name:string age:int\n  howdy create pages blog_posts blog_post title body published:bool --api\n  howdy create pages notes note body --add-auth",
 		Args:    cobra.MinimumNArgs(3),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			kind := "pages"
 			if api {
 				kind = "pages+api"
 			}
-			return runCreateSlice(kind, args[0], args[1], args[2:], layout, plain)
+			return runCreateSlice(kind, args[0], args[1], args[2:], layout, addAuth, plain)
 		},
 	}
 	cmd.Flags().BoolVar(&api, "api", false, "also create the JSON controller under /api/<plural>")
+	cmd.Flags().BoolVar(&addAuth, "add-auth", false, "guard every route with Howdy Auth, so only someone signed in reaches them (needs 'howdy add auth')")
 	cmd.Flags().StringVar(&layout, "layout", "", "render the pages through this layout from src/<project>/layouts/ instead of the default")
 	cmd.Flags().BoolVar(&plain, "plain", false, "print progress as plain lines instead of animating")
 	return cmd
@@ -555,7 +587,7 @@ Column types follow the project's database, SQLite or PostgreSQL.`,
 		Example: "  howdy create migration users name:string email:string age:int",
 		Args:    cobra.MinimumNArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runCreateSlice("migration", args[0], "", args[1:], "", plain)
+			return runCreateSlice("migration", args[0], "", args[1:], "", false, plain)
 		},
 	}
 	cmd.Flags().BoolVar(&plain, "plain", false, "print progress as plain lines instead of animating")
@@ -564,7 +596,7 @@ Column types follow the project's database, SQLite or PostgreSQL.`,
 
 // runCreateSlice serves every subcommand; kind is "controller", "pages",
 // "pages+api", "repo" or "migration", and singular is empty for a migration.
-func runCreateSlice(kind, plural, singular string, fields []string, layout string, plain bool) error {
+func runCreateSlice(kind, plural, singular string, fields []string, layout string, addAuth, plain bool) error {
 	dir, err := findProjectDir()
 	if err != nil {
 		return err
@@ -591,6 +623,12 @@ func runCreateSlice(kind, plural, singular string, fields []string, layout strin
 		if slice.Layout, err = project.ResolveLayout(layout); err != nil {
 			return err
 		}
+	}
+	if addAuth {
+		if err := project.NeedsAuth(); err != nil {
+			return err
+		}
+		slice.Auth = true
 	}
 	kind = strings.TrimSuffix(kind, "+api")
 	registering, registered := "Registering the migration", "platform/database.gleam"
@@ -653,6 +691,9 @@ func runCreateSlice(kind, plural, singular string, fields []string, layout strin
 		return nil
 	}
 	notes = append(notes, fmt.Sprintf("Add validation rules in src/%s/%s/%s.gleam.", project.Name, plural, singular))
+	if slice.Auth {
+		notes = append(notes, "Only someone signed in reaches the routes; ctx.guard.user is the signed-in user.")
+	}
 	commands := []tui.Command{{Cmd: "gleam test", Note: fmt.Sprintf("run the tests, including the new ones for %s", plural)}}
 	switch {
 	case slice.Pages:

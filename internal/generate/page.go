@@ -30,11 +30,15 @@ type Page struct {
 	Exists bool
 	// Layout names the layout the page renders through, such as "default".
 	Layout string
+	// Auth reports whether the controller guards its routes with Howdy
+	// Auth: a new one made with --add-auth, or an existing guarded one.
+	Auth bool
 }
 
 // NewPage validates the names and checks that the controller does not
-// already have the page. layout is a --layout value, empty for the default.
-func NewPage(p *Project, controller, name string, live bool, layout string) (*Page, error) {
+// already have the page. layout is a --layout value, empty for the default,
+// and addAuth is --add-auth, which guards a new controller's routes.
+func NewPage(p *Project, controller, name string, live bool, layout string, addAuth bool) (*Page, error) {
 	if err := p.NeedsPages("pages"); err != nil {
 		return nil, err
 	}
@@ -77,12 +81,18 @@ func NewPage(p *Project, controller, name string, live bool, layout string) (*Pa
 	case !errors.Is(err, os.ErrNotExist):
 		return nil, err
 	}
+	if pg.Auth, err = p.guarded(pg.ControllerFile(), src, pg.Exists, addAuth); err != nil {
+		return nil, err
+	}
 	return pg, nil
 }
 
 // paramRoute is the start of a line routing a path with a parameter, such
 // as `|> controller.get("/:id", ...`.
 var paramRoute = regexp.MustCompile(`(?m)^[ \t]*\|> controller\.\w+\(\s*(?:http\.\w+,\s*)?"[^"]*:`)
+
+// buildCall is the line that finishes a guarded controller's routes.
+var buildCall = regexp.MustCompile(`(?m)^[ \t]*\|> controller\.build\b`)
 
 var controllerPrefix = regexp.MustCompile(`controller\.new\(\s*"([^"]*)"`)
 
@@ -215,13 +225,18 @@ func (pg *Page) testFile() string {
 }
 
 // Write creates the files, refusing to replace any that exist, except that
-// shared files already in the project are kept. It returns the paths written.
+// shared files already in the project are kept, and for a guarded
+// controller adds sign_in to the test support. It returns the paths written.
 func (pg *Page) Write() ([]string, error) {
 	files, err := pg.Files()
 	if err != nil {
 		return nil, err
 	}
-	return writeFiles(pg.Project.Dir, files)
+	written, err := writeFiles(pg.Project.Dir, files)
+	if err != nil || !pg.Auth {
+		return written, err
+	}
+	return pg.Project.addSignIn(written)
 }
 
 // writeFiles creates files under dir, refusing to replace any that exist,
@@ -275,6 +290,9 @@ func (pg *Page) Register() (notes []string) {
 	}
 	root := filepath.Join("src", p.Name+".gleam")
 	controller := pg.ControllerModule() + ".controller()"
+	if pg.Auth {
+		controller = pg.ControllerModule() + ".controller(services.identity)"
+	}
 	err := edit(filepath.Join(p.Dir, root),
 		fmt.Sprintf("import %s/%s/%s", p.Name, pg.Controller, pg.ControllerModule()),
 		// Before the first controller, so it stays ahead of the static
@@ -291,8 +309,9 @@ func (pg *Page) Register() (notes []string) {
 
 // appendToFunction adds lines to the end of the body of `pub fn name(...)`,
 // where a controller function ends its pipeline of routes, or before its
-// first route with a path parameter, and the import after the file's last
-// import.
+// first route with a path parameter, or before `|> controller.build`,
+// which ends a guarded controller's routes so any after it would be
+// unguarded. The import goes after the file's last import.
 func appendToFunction(path, name, importLine, lines string) error {
 	src, err := os.ReadFile(path)
 	if err != nil {
@@ -321,6 +340,9 @@ func appendToFunction(path, name, importLine, lines string) error {
 	// Routes match in order, so a literal path such as "/stats" must come
 	// before a parameter such as "/:id" that would take it.
 	if loc := paramRoute.FindStringIndex(text[afterParams+open : closing]); loc != nil {
+		at := afterParams + open + loc[0]
+		text = text[:at] + lines + text[at:]
+	} else if loc := buildCall.FindStringIndex(text[afterParams+open : closing]); loc != nil {
 		at := afterParams + open + loc[0]
 		text = text[:at] + lines + text[at:]
 	} else {

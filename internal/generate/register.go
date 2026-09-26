@@ -25,6 +25,9 @@ func (c *Slice) Register() (notes []string) {
 	}
 	for _, module := range modules {
 		controller := module + ".controller(db)"
+		if c.Auth {
+			controller = module + ".controller(db, services.identity)"
+		}
 		err := edit(filepath.Join(p.Dir, root),
 			fmt.Sprintf("import %s/%s/%s", p.Name, c.Plural, module),
 			// Before the first controller, so it stays ahead of the static

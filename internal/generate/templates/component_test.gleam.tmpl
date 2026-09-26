@@ -17,7 +17,13 @@ pub fn {{.Module}}_mounts_its_socket_test() {
 }
 
 pub fn {{.Module}}_socket_requires_websocket_test() {
-{{- if .HasDatabase}}
+{{- if .Auth}}
+  use db <- support.with_db()
+  let res =
+    testing.get("{{.URL}}")
+    |> testing.header("authorization", "Bearer " <> support.sign_in(db))
+    |> testing.send(support.app(db))
+{{- else if .HasDatabase}}
   use db <- support.with_db()
   let res = testing.get("{{.URL}}") |> testing.send(support.app(db))
 {{- else if .HasSupport}}

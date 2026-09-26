@@ -6,7 +6,7 @@
 //// its layout's `render_live`, which loads the script it connects with.
 
 import gleam/int
-import howdy/controller.{type Context}
+import howdy/controller.{type GuardedContext}
 import howdy/ui
 import howdy/ui/button
 import howdy/ui/live
@@ -23,7 +23,7 @@ pub fn mount() -> Element(msg) {
 
 /// The WebSocket the component connects to, routed in
 /// `{{.ControllerFile}}`.
-pub fn socket(ctx: Context) {
+pub fn socket(ctx: GuardedContext(guarded)) {
   live.serve(ctx, app(), with: Nil)
 }
 

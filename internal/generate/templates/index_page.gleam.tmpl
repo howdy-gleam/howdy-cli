@@ -6,7 +6,7 @@ import gleam/float
 import gleam/int
 {{- end}}
 import gleam/list
-import howdy/controller.{type Context}
+import howdy/controller.{type GuardedContext}
 import howdy/ui
 import howdy/ui/button
 import lustre/attribute as a
@@ -17,7 +17,7 @@ import {{.Project.Name}}/platform/pages
 import {{.Project.Name}}/{{.Plural}}/pages/helpers
 import {{.Project.Name}}/{{.Plural}}/{{.Singular}}.{type {{.Type}}}
 
-pub fn show(ctx: Context, items: List({{.Type}})) {
+pub fn show(ctx: GuardedContext(guarded), items: List({{.Type}})) {
   {{.LayoutModule}}.render(ctx, "{{.Title}}", [
     ui.h1("{{.Title}}"),
     ui.row([], [pages.button_link(button.Primary, "/{{.Plural}}/new", "New {{.Label}}")]),

@@ -9,7 +9,7 @@ import (
 
 func createComponent(t *testing.T, p *Project, controller, name string, live bool) *Component {
 	t.Helper()
-	c, err := NewComponent(p, controller, name, live)
+	c, err := NewComponent(p, controller, name, live, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -38,7 +38,7 @@ func TestGlobalComponent(t *testing.T) {
 	if read(t, p, "src/demo_site.gleam") != root {
 		t.Error("a component that is not live registers nothing")
 	}
-	if _, err := NewComponent(p, "", "price_tag", false); err == nil || !strings.Contains(err.Error(), "already exists among global components") {
+	if _, err := NewComponent(p, "", "price_tag", false, false); err == nil || !strings.Contains(err.Error(), "already exists among global components") {
 		t.Errorf("a component should not be created twice, got %v", err)
 	}
 }
@@ -80,7 +80,7 @@ func TestGlobalLiveComponents(t *testing.T) {
 
 func TestControllerComponents(t *testing.T) {
 	p := opened(t, scaffold.SQLite)
-	if _, err := NewComponent(p, "blog", "card", false); err == nil || !strings.Contains(err.Error(), "there is no blog controller") {
+	if _, err := NewComponent(p, "blog", "card", false, false); err == nil || !strings.Contains(err.Error(), "there is no blog controller") {
 		t.Errorf("a component needs its controller, got %v", err)
 	}
 	c, err := NewSlice(p, "posts", "post", []string{"title"})
@@ -113,7 +113,7 @@ func TestControllerComponents(t *testing.T) {
 	if !strings.Contains(read(t, p, "test/demo_site/posts/components/comments_component_test.gleam"), `testing.get("/posts/components/comments/live")`) {
 		t.Error("the test should reach the socket")
 	}
-	if _, err := NewComponent(p, "posts", "comments", true); err == nil {
+	if _, err := NewComponent(p, "posts", "comments", true, false); err == nil {
 		t.Error("a live component should not be created twice")
 	}
 }

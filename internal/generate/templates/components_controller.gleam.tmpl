@@ -1,8 +1,21 @@
 //// The WebSockets of the live components in this folder, under
 //// `/{{.Prefix}}`. `howdy create live_component <name>` adds each one here.
+{{- if .Auth}}
+//// Every route needs someone signed in, or it answers 401. New routes go
+//// before `controller.build`.
+
+import howdy/auth.{type Auth}
+import howdy/controller
+
+pub fn controller(identity: Auth) {
+  controller.guarded("{{.Prefix}}", auth.required(identity))
+  |> controller.build
+}
+{{- else}}
 
 import howdy/controller
 
 pub fn controller() {
   controller.new("{{.Prefix}}")
 }
+{{- end}}

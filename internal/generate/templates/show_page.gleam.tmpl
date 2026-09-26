@@ -3,7 +3,7 @@
 import gleam/float
 {{- end}}
 import gleam/int
-import howdy/controller.{type Context}
+import howdy/controller.{type GuardedContext}
 import howdy/ui
 import howdy/ui/button
 import lustre/attribute as a
@@ -14,7 +14,7 @@ import {{.Project.Name}}/platform/pages
 import {{.Project.Name}}/{{.Plural}}/pages/helpers
 import {{.Project.Name}}/{{.Plural}}/{{.Singular}}.{type {{.Type}}}
 
-pub fn show(ctx: Context, item: {{.Type}}) {
+pub fn show(ctx: GuardedContext(guarded), item: {{.Type}}) {
   let path = helpers.path(item)
   let title = "{{.SingularTitle}} " <> int.to_string(item.id)
   {{.LayoutModule}}.render(ctx, title, [

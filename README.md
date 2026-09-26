@@ -308,6 +308,29 @@ previews. Guard a controller with
 `controller.guarded("/account", auth.required(services.identity))`. Set
 `APP_ORIGIN` to the site's public address before deploying.
 
+Once a project has auth, `--add-auth` on the `create` commands that write
+a controller (`controller`, `pages`, `page`, `live_page` and
+`live_component`) guards every route of the controller they create:
+
+```sh
+howdy create pages notes note body --add-auth
+howdy create page account index --add-auth
+```
+
+The controller starts with `controller.guarded(prefix,
+auth.required(identity))` and ends with `|> controller.build`. It takes the
+app's identity, registered as `notes_controller.controller(db,
+services.identity)`, and anyone not signed in gets a 401. Handlers find the
+user in `ctx.guard.user`. Pages take any context, so they render behind the
+guard. The tests sign in with `support.sign_in(db)`, which is added to
+`test/<project>/support.gleam` the first time, and check that a request
+without a session is refused.
+
+Pages and live components added to a guarded controller later go behind
+the guard without the flag: their routes go before `controller.build`. For
+a controller that exists without a guard, `--add-auth` is refused rather
+than leave its other routes open.
+
 ```sh
 howdy add remote
 ```

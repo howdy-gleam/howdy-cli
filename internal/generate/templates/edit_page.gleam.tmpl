@@ -3,7 +3,7 @@
 
 import gleam/int
 import gleam/list
-import howdy/controller.{type Context}
+import howdy/controller.{type GuardedContext}
 import howdy/service
 import howdy/ui
 import howdy/ui/button
@@ -15,7 +15,7 @@ import {{.Project.Name}}/platform/pages
 import {{.Project.Name}}/{{.Plural}}/pages/helpers
 
 pub fn show(
-  ctx: Context,
+  ctx: GuardedContext(guarded),
   id: Int,
   form: pages.Form,
   errors: List(service.FieldError),

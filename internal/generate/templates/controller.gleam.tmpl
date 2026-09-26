@@ -9,9 +9,16 @@
 //// | DELETE | `/api/{{.Plural}}/:id` | 204 |
 ////
 //// Validation failures return 422 with field errors; unknown ids return 404.
+{{- if .Auth}}
+//// Every route needs someone signed in, or it answers 401; `ctx.guard.user`
+//// is the signed-in user.
+{{- end}}
 
 import gleam/json
 import gloo/repo.{type Repo}
+{{- if .Auth}}
+import howdy/auth.{type Auth}
+{{- end}}
 import howdy/body
 import howdy/controller
 import howdy/param
@@ -19,8 +26,13 @@ import howdy/service
 import {{.Project.Name}}/{{.Plural}}/{{.Singular}}
 import {{.Project.Name}}/{{.Plural}}/{{.Plural}}
 
+{{- if .Auth}}
+pub fn controller(db: Repo, identity: Auth) {
+  controller.guarded("api/{{.Plural}}", auth.required(identity))
+{{- else}}
 pub fn controller(db: Repo) {
   controller.new("api/{{.Plural}}")
+{{- end}}
   |> controller.get("/", fn(ctx) {
     {{.Plural}}.all(db) |> service.respond(ctx, json.array(_, {{.Singular}}.to_json))
   })
@@ -41,4 +53,7 @@ pub fn controller(db: Repo) {
     use id <- param.int(ctx, "id")
     {{.Plural}}.delete(db, id) |> service.no_content(ctx)
   })
+{{- if .Auth}}
+  |> controller.build
+{{- end}}
 }
