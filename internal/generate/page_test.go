@@ -49,11 +49,11 @@ func TestPageCreatesController(t *testing.T) {
 		if pg.Exists || pg.URL() != "/blog/about" {
 			t.Errorf("%s: got %+v, URL %s", db.Label(), pg, pg.URL())
 		}
-		controller := read(t, p, "src/demo_site/blog/blog_controller.gleam")
+		controller := read(t, p, "src/demo_site/features/blog/blog_controller.gleam")
 		for _, want := range []string{
 			`controller.new("blog")`,
 			`|> controller.get("/about", about_page.show)`,
-			"import demo_site/blog/pages/about_page\n",
+			"import demo_site/features/blog/pages/about_page\n",
 		} {
 			if !strings.Contains(controller, want) {
 				t.Errorf("%s: blog_controller.gleam should contain %q:\n%s", db.Label(), want, controller)
@@ -61,14 +61,14 @@ func TestPageCreatesController(t *testing.T) {
 		}
 		root := read(t, p, "src/demo_site.gleam")
 		if !strings.Contains(root, "|> howdy.controller(blog_controller.controller())") ||
-			!strings.Contains(root, "import demo_site/blog/blog_controller\n") {
+			!strings.Contains(root, "import demo_site/features/blog/blog_controller\n") {
 			t.Errorf("%s: the controller is not registered:\n%s", db.Label(), root)
 		}
-		page := read(t, p, "src/demo_site/blog/pages/about_page.gleam")
+		page := read(t, p, "src/demo_site/features/blog/pages/about_page.gleam")
 		if !strings.Contains(page, `default_layout.render(ctx, "About", [`) || strings.Contains(page, "render_live") {
 			t.Errorf("%s: unexpected page:\n%s", db.Label(), page)
 		}
-		test := read(t, p, "test/demo_site/blog/pages/about_page_test.gleam")
+		test := read(t, p, "test/demo_site/features/blog/pages/about_page_test.gleam")
 		app := "support.app(db)"
 		if db == scaffold.NoDatabase {
 			app = "support.app()"
@@ -87,11 +87,11 @@ func TestPageAddsToExistingController(t *testing.T) {
 	if !pg.Exists || pg.Module() != "editor_page" {
 		t.Errorf("got %+v", pg)
 	}
-	controller := read(t, p, "src/demo_site/blog/blog_controller.gleam")
+	controller := read(t, p, "src/demo_site/features/blog/blog_controller.gleam")
 	for _, want := range []string{
 		`|> controller.get("/about", about_page.show)` + "\n" + `|> controller.get("/editor", editor_page.show)` + "\n" +
 			`|> controller.get("/editor/live", editor_page.socket)` + "\n}",
-		"import demo_site/blog/pages/editor_page\n",
+		"import demo_site/features/blog/pages/editor_page\n",
 	} {
 		if !strings.Contains(controller, want) {
 			t.Errorf("blog_controller.gleam should contain %q:\n%s", want, controller)
@@ -100,12 +100,12 @@ func TestPageAddsToExistingController(t *testing.T) {
 	if read(t, p, "src/demo_site.gleam") != root {
 		t.Error("an existing controller should not be registered again")
 	}
-	page := read(t, p, "src/demo_site/blog/pages/editor_page.gleam")
+	page := read(t, p, "src/demo_site/features/blog/pages/editor_page.gleam")
 	if !strings.Contains(page, `live.mount("/blog/editor/live")`) || !strings.Contains(page, "pub fn socket(") ||
 		!strings.Contains(page, `default_layout.render_live(ctx, "Editor", [`) {
 		t.Errorf("unexpected live page:\n%s", page)
 	}
-	if !strings.Contains(read(t, p, "test/demo_site/blog/pages/editor_page_test.gleam"), `testing.get("/blog/editor/live")`) {
+	if !strings.Contains(read(t, p, "test/demo_site/features/blog/pages/editor_page_test.gleam"), `testing.get("/blog/editor/live")`) {
 		t.Error("the live page test should check the socket route")
 	}
 
@@ -115,7 +115,7 @@ func TestPageAddsToExistingController(t *testing.T) {
 	if site.URL() != "/contact" {
 		t.Errorf("URL = %s", site.URL())
 	}
-	if !strings.Contains(read(t, p, "src/demo_site/site/site_controller.gleam"), `|> controller.get("/contact", contact_page.show)`+"\n}") {
+	if !strings.Contains(read(t, p, "src/demo_site/features/site/site_controller.gleam"), `|> controller.get("/contact", contact_page.show)`+"\n}") {
 		t.Error("the page was not added to the site controller")
 	}
 }
@@ -126,7 +126,7 @@ func TestIndexPage(t *testing.T) {
 	if pg.URL() != "/docs" || pg.SocketURL() != "/docs/live" {
 		t.Errorf("URL = %s, socket %s", pg.URL(), pg.SocketURL())
 	}
-	if !strings.Contains(read(t, p, "src/demo_site/docs/docs_controller.gleam"), `controller.get("/", index_page.show)`) {
+	if !strings.Contains(read(t, p, "src/demo_site/features/docs/docs_controller.gleam"), `controller.get("/", index_page.show)`) {
 		t.Error("an index page should be at the controller's root")
 	}
 }
@@ -134,7 +134,7 @@ func TestIndexPage(t *testing.T) {
 func TestPageRefusesDuplicates(t *testing.T) {
 	p := opened(t, scaffold.SQLite)
 	createPage(t, p, "blog", "about", false)
-	before := read(t, p, "src/demo_site/blog/blog_controller.gleam")
+	before := read(t, p, "src/demo_site/features/blog/blog_controller.gleam")
 	for _, c := range []struct {
 		controller, name string
 		live             bool
@@ -151,7 +151,7 @@ func TestPageRefusesDuplicates(t *testing.T) {
 		}
 	}
 	// A route added by hand counts too.
-	path := filepath.Join(p.Dir, "src/demo_site/blog/blog_controller.gleam")
+	path := filepath.Join(p.Dir, "src/demo_site/features/blog/blog_controller.gleam")
 	os.WriteFile(path, []byte(strings.Replace(before, "\n}", "\n|> controller.get(\"/faq\", fn(ctx) { todo })\n}", 1)), 0o644)
 	if _, err := NewPage(p, "blog", "faq", false, "", false); err == nil || !strings.Contains(err.Error(), "/blog/faq") {
 		t.Errorf("got %v", err)
@@ -192,14 +192,14 @@ func TestPageJoinsPagesController(t *testing.T) {
 	if !pg.Exists || pg.URL() != "/users/stats" {
 		t.Errorf("got %+v, URL %s", pg, pg.URL())
 	}
-	controller := read(t, p, "src/demo_site/users/users_controller.gleam")
+	controller := read(t, p, "src/demo_site/features/users/users_controller.gleam")
 	stats := strings.Index(controller, `controller.get("/stats", stats_page.show)`)
 	socket := strings.Index(controller, `controller.get("/stats/live", stats_page.socket)`)
 	id := strings.Index(controller, `controller.get("/:id"`)
 	if stats < 0 || socket < 0 || id < 0 || stats > id || socket > id {
 		t.Errorf("the page's routes should come before /:id:\n%s", controller)
 	}
-	if strings.Contains(read(t, p, "src/demo_site/users/users_api_controller.gleam"), "stats_page") {
+	if strings.Contains(read(t, p, "src/demo_site/features/users/users_api_controller.gleam"), "stats_page") {
 		t.Error("the page should not be added to the JSON controller")
 	}
 	if _, err := NewPage(p, "users", "index", false, "", false); err == nil {
@@ -241,7 +241,7 @@ func TestPageLayouts(t *testing.T) {
 	if _, err := stats.Write(); err != nil {
 		t.Fatal(err)
 	}
-	page := read(t, p, "src/demo_site/admin/pages/stats_page.gleam")
+	page := read(t, p, "src/demo_site/features/admin/pages/stats_page.gleam")
 	if !strings.Contains(page, "import demo_site/layouts/admin_layout\n") || !strings.Contains(page, "admin_layout.render(ctx,") {
 		t.Errorf("the page should render through the admin layout:\n%s", page)
 	}
@@ -274,14 +274,35 @@ func TestDefaultLayoutWrittenWhenMissing(t *testing.T) {
 	}
 }
 
-func TestFeaturesCannotUseProjectFolders(t *testing.T) {
+func TestFeaturesMayShareNamesWithProjectFolders(t *testing.T) {
 	p := opened(t, scaffold.SQLite)
 	for _, name := range []string{"layouts", "platform", "migrations"} {
-		if _, err := NewPage(p, name, "about", false, "", false); err == nil {
-			t.Errorf("a controller called %s should be refused", name)
+		pg, err := NewPage(p, name, "about", false, "", false)
+		if err != nil {
+			t.Fatalf("a controller called %s: %v", name, err)
 		}
-		if _, err := NewSlice(p, name, "thing", []string{"name"}); err == nil {
-			t.Errorf("a slice called %s should be refused", name)
+		if want := "src/demo_site/features/" + name + "/" + name + "_controller.gleam"; pg.ControllerFile() != want {
+			t.Errorf("ControllerFile = %s, want %s", pg.ControllerFile(), want)
+		}
+		if _, err := pg.Write(); err != nil {
+			t.Fatal(err)
+		}
+		c, err := NewSlice(p, name, "thing", []string{"name"})
+		if err != nil {
+			t.Fatalf("a slice called %s: %v", name, err)
+		}
+		files, err := c.Files()
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, f := range files {
+			path := filepath.ToSlash(f.Path)
+			if path == "src/demo_site/migrations/create_"+name+".gleam" {
+				continue
+			}
+			if strings.HasPrefix(path, "src/demo_site/"+name+"/") {
+				t.Errorf("the %s slice writes %s, into the project's own folder", name, f.Path)
+			}
 		}
 	}
 }

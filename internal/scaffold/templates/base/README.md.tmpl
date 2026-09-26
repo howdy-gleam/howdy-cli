@@ -107,7 +107,7 @@ gleam test
 ```
 
 Tests use `howdy/testing` to send requests straight to the app, without a
-socket. See `test/{{.Name}}/site/site_controller_test.gleam`.
+socket. See `test/{{.Name}}/features/site/site_controller_test.gleam`.
 
 ## Layout
 
@@ -118,10 +118,11 @@ src/
 ├── console.gleam             # console shortcuts
 {{- end}}
 ├── {{.Name}}/
-│   ├── layouts/
-│   │   └── default_layout.gleam   # what every page is rendered inside
-│   └── site/
-│       └── site_controller.gleam  # the home page
+│   ├── features/
+│   │   └── site/
+│   │       └── site_controller.gleam  # the home page
+│   └── layouts/
+│       └── default_layout.gleam   # what every page is rendered inside
 └── tasks/
     └── css.gleam            # writes priv/public/assets/ui.css
 dev/
@@ -133,8 +134,10 @@ priv/public/
 test/
 ```
 
-Group new features by folder under `src/{{.Name}}/`, each with its own
-controller, and register the controller in `src/{{.Name}}.gleam`.
+Group new features by folder under `src/{{.Name}}/features/`, each with its
+own controller, and register the controller in `src/{{.Name}}.gleam`. The
+other folders in `src/{{.Name}}/` belong to Howdy's generators, so a feature
+can have any name without clashing with them.
 
 ## Layouts
 
@@ -155,7 +158,7 @@ default layout, or another one with `--layout <name>`, and
 
 ## The 404 page
 
-An address the site does not have shows `src/{{.Name}}/site/pages/not_found_page.gleam`
+An address the site does not have shows `src/{{.Name}}/features/site/pages/not_found_page.gleam`
 to people, rendered with the default layout, and change it as you like.
 API clients, `fetch` and curl get Howdy's JSON error instead: the middleware in
 `src/{{.Name}}/platform/not_found.gleam` shows the page only when the request's

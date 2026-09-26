@@ -14,8 +14,8 @@ import lustre/element.{type Element, text}
 import lustre/element/html as h
 import {{.Project.Name}}/layouts/{{.LayoutModule}}
 import {{.Project.Name}}/platform/pages
-import {{.Project.Name}}/{{.Plural}}/pages/helpers
-import {{.Project.Name}}/{{.Plural}}/{{.Singular}}.{type {{.Type}}}
+import {{.Project.FeatureImport .Plural}}/pages/helpers
+import {{.Project.FeatureImport .Plural}}/{{.Singular}}.{type {{.Type}}}
 
 pub fn show(ctx: GuardedContext(guarded), items: List({{.Type}})) {
   {{.LayoutModule}}.render(ctx, "{{.Title}}", [

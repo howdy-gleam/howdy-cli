@@ -189,12 +189,13 @@ src/
 {{- end}}
 {{- if .Database}}
 ├── {{.Name}}/
-│   ├── health/
-│   │   └── health_controller.gleam  # GET /health
-│   ├── todos/
-│   │   ├── todo_item.gleam    # record, validation, JSON codecs, Gloo table
-│   │   ├── todos.gleam        # context: every database operation on todos
-│   │   └── todo_controller.gleam  # JSON API
+│   ├── features/
+│   │   ├── health/
+│   │   │   └── health_controller.gleam  # GET /health
+│   │   └── todos/
+│   │       ├── todo_item.gleam    # record, validation, JSON codecs, Gloo table
+│   │       ├── todos.gleam        # context: every database operation on todos
+│   │       └── todo_controller.gleam  # JSON API
 │   ├── migrations/
 │   │   └── create_todos.gleam # version 1
 │   └── platform/
@@ -204,8 +205,9 @@ src/
     └── migrate.gleam          # applies migrations without starting the server
 {{- else}}
 └── {{.Name}}/
-    └── health/
-        └── health_controller.gleam  # GET /health
+    └── features/
+        └── health/
+            └── health_controller.gleam  # GET /health
 {{- end}}
 dev/
 └── {{.Name}}_dev.gleam        # `gleam dev` entry point with hot reload{{if .Full}}, admin and telemetry{{end}}
@@ -216,8 +218,10 @@ docker/postgres/init.sql       # creates the test database on first start
 {{- end}}
 ```
 
-Group new features by folder under `src/{{.Name}}/`, each with its own
-controller, and register the controller in `src/{{.Name}}.gleam`.
+Group new features by folder under `src/{{.Name}}/features/`, each with its
+own controller, and register the controller in `src/{{.Name}}.gleam`. The
+other folders in `src/{{.Name}}/` belong to Howdy's generators, so a feature
+can have any name without clashing with them.
 {{- if .Database}}
 `howdy create controller <plural> <singular> name:type ...` writes a
 feature with its record, database operations, JSON controller, migration

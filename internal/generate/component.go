@@ -12,7 +12,8 @@ import (
 )
 
 // Component is a reusable piece of view, global in src/<project>/components/
-// or belonging to a controller in src/<project>/<controller>/components/.
+// or belonging to a controller in
+// src/<project>/features/<controller>/components/.
 // A live one is a Lustre server component with a WebSocket route: in its
 // controller, or for a global one in components/components_controller.gleam,
 // which is created with the first.
@@ -102,7 +103,7 @@ func (c *Component) folder() string {
 	if c.Controller == "" {
 		return filepath.Join("src", c.Project.Name, globalComponents)
 	}
-	return filepath.Join("src", c.Project.Name, c.Controller, "components")
+	return filepath.Join(c.Project.FeatureDir(c.Controller), "components")
 }
 
 // File is the component's path, relative to the project directory.
@@ -110,7 +111,7 @@ func (c *Component) File() string {
 	return filepath.ToSlash(filepath.Join(c.folder(), c.Module()+".gleam"))
 }
 
-// Import is the component's module path, e.g. "my_app/blog/components/card_component".
+// Import is the component's module path, e.g. "my_app/features/blog/components/card_component".
 func (c *Component) Import() string {
 	return strings.TrimPrefix(strings.TrimSuffix(c.File(), ".gleam"), "src/")
 }
@@ -121,7 +122,7 @@ func (c *Component) ControllerFile() string {
 	if c.Controller == "" {
 		return filepath.ToSlash(filepath.Join(c.folder(), "components_controller.gleam"))
 	}
-	return filepath.ToSlash(filepath.Join("src", c.Project.Name, c.Controller, c.Controller+"_controller.gleam"))
+	return filepath.ToSlash(filepath.Join(c.Project.FeatureDir(c.Controller), c.Controller+"_controller.gleam"))
 }
 
 // Route is the socket's path within its controller, and URL the full path.

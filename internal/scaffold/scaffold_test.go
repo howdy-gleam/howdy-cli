@@ -58,12 +58,12 @@ func TestWriteRendersProject(t *testing.T) {
 
 	want := []string{
 		"gleam.toml", "README.md", ".gitignore", ".env.example",
-		"src/demo_site.gleam", "src/demo_site/site/site_controller.gleam", "src/demo_site/layouts/default_layout.gleam",
+		"src/demo_site.gleam", "src/demo_site/features/site/site_controller.gleam", "src/demo_site/layouts/default_layout.gleam",
 		"src/tasks/css.gleam", "dev/demo_site_dev.gleam",
-		"test/demo_site_test.gleam", "test/demo_site/site/site_controller_test.gleam",
+		"test/demo_site_test.gleam", "test/demo_site/features/site/site_controller_test.gleam",
 		"priv/public/assets/style.css", "priv/public/assets/ui.css",
-		"src/demo_site/site/pages/not_found_page.gleam", "src/demo_site/platform/not_found.gleam",
-		"test/demo_site/site/not_found_test.gleam",
+		"src/demo_site/features/site/pages/not_found_page.gleam", "src/demo_site/platform/not_found.gleam",
+		"test/demo_site/features/site/not_found_test.gleam",
 	}
 	for _, w := range want {
 		if _, err := os.Stat(filepath.Join(p.Dir, w)); err != nil {
@@ -85,14 +85,14 @@ func TestWriteRendersProject(t *testing.T) {
 	if strings.Contains(string(toml), "gloo") {
 		t.Error("page-only project should not depend on gloo")
 	}
-	site, _ := os.ReadFile(filepath.Join(p.Dir, "src/demo_site/site/site_controller.gleam"))
+	site, _ := os.ReadFile(filepath.Join(p.Dir, "src/demo_site/features/site/site_controller.gleam"))
 	if !strings.Contains(string(site), `ui.h1("Howdy, Demo site!")`) {
 		t.Error("site controller does not use the project title")
 	}
 	if strings.Contains(string(site), "{{") {
 		t.Error("unrendered template markers in site controller")
 	}
-	if _, err := os.Stat(filepath.Join(p.Dir, "src/demo_site/todos/todos.gleam")); err == nil {
+	if _, err := os.Stat(filepath.Join(p.Dir, "src/demo_site/features/todos/todos.gleam")); err == nil {
 		t.Error("page-only project should not contain the todos slice")
 	}
 }
@@ -117,8 +117,8 @@ func TestDatabaseOverlay(t *testing.T) {
 		}
 	}
 	for _, want := range []string{
-		"src/demo_site/todos/todo_item.gleam", "src/demo_site/todos/todos.gleam",
-		"src/demo_site/todos/todo_controller.gleam", "src/demo_site/site/todo_list.gleam",
+		"src/demo_site/features/todos/todo_item.gleam", "src/demo_site/features/todos/todos.gleam",
+		"src/demo_site/features/todos/todo_controller.gleam", "src/demo_site/features/site/todo_list.gleam",
 		"src/demo_site/migrations/create_todos.gleam", "src/demo_site/platform/database.gleam",
 		"src/tasks/migrate.gleam", "test/demo_site/support.gleam", "test/demo_site_test_ffi.erl",
 		"priv/public/assets/ui.css", "src/tasks/css.gleam",
@@ -182,19 +182,19 @@ func TestPostgresOverlay(t *testing.T) {
 		}
 	}
 	for path, want := range map[string]string{
-		"gleam.toml":                                  `pog = ">= 4.1.0 and < 5.0.0"`,
-		"docker-compose.yml":                          "POSTGRES_DB: demo_site_dev",
-		"docker/postgres/init.sql":                    "CREATE DATABASE demo_site_test;",
-		".env.example":                                "DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/demo_site_dev",
-		"src/demo_site.gleam":                         "database.connect(url)",
-		"src/demo_site/platform/database.gleam":       "pog.url_config",
-		"src/demo_site/migrations/create_todos.gleam": "pg.Boolean",
-		"src/demo_site/todos/todos.gleam":             "sql.bool(done)",
-		"src/demo_site/todos/todo_item.gleam":         "decode.field(2, decode.bool)",
-		"src/tasks/migrate.gleam":                     "`DATABASE_URL`",
-		"test/demo_site/support.gleam":                "TEST_DATABASE_URL",
+		"gleam.toml":                                   `pog = ">= 4.1.0 and < 5.0.0"`,
+		"docker-compose.yml":                           "POSTGRES_DB: demo_site_dev",
+		"docker/postgres/init.sql":                     "CREATE DATABASE demo_site_test;",
+		".env.example":                                 "DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/demo_site_dev",
+		"src/demo_site.gleam":                          "database.connect(url)",
+		"src/demo_site/platform/database.gleam":        "pog.url_config",
+		"src/demo_site/migrations/create_todos.gleam":  "pg.Boolean",
+		"src/demo_site/features/todos/todos.gleam":     "sql.bool(done)",
+		"src/demo_site/features/todos/todo_item.gleam": "decode.field(2, decode.bool)",
+		"src/tasks/migrate.gleam":                      "`DATABASE_URL`",
+		"test/demo_site/support.gleam":                 "TEST_DATABASE_URL",
 		// Shared with the SQLite project.
-		"src/demo_site/todos/todo_controller.gleam": "controller.new(\"api/todos\")",
+		"src/demo_site/features/todos/todo_controller.gleam": "controller.new(\"api/todos\")",
 	} {
 		if !strings.Contains(byPath[path], want) {
 			t.Errorf("%s should contain %q", path, want)
@@ -367,7 +367,7 @@ func TestAPIProject(t *testing.T) {
 				if strings.Contains(content, "{{") {
 					t.Errorf("unrendered template markers in %s (%s)", f.Path, label)
 				}
-				for _, prefix := range []string{"priv/", "src/demo_site/site/", "src/demo_site/layouts/", "test/demo_site/site/"} {
+				for _, prefix := range []string{"priv/", "src/demo_site/features/site/", "src/demo_site/layouts/", "test/demo_site/features/site/"} {
 					if strings.HasPrefix(f.Path, prefix) {
 						t.Errorf("an API project (%s) should not have %s", label, f.Path)
 					}
@@ -385,9 +385,9 @@ func TestAPIProject(t *testing.T) {
 			}
 			for path, wants := range map[string][]string{
 				"gleam.toml":          {`description = "A Howdy API server`, `gleam_json = ">= 3.1.0 and < 4.0.0"`},
-				"src/demo_site.gleam": {"|> howdy.controller(health.controller())", "import demo_site/health/health_controller as health", "|> howdy.not_found(fn(ctx) {", `service.NotFound("Not found")`},
-				"src/demo_site/health/health_controller.gleam":       {`controller.new("health")`},
-				"test/demo_site/health/health_controller_test.gleam": {`get("/health")`},
+				"src/demo_site.gleam": {"|> howdy.controller(health.controller())", "import demo_site/features/health/health_controller as health", "|> howdy.not_found(fn(ctx) {", `service.NotFound("Not found")`},
+				"src/demo_site/features/health/health_controller.gleam":       {`controller.new("health")`},
+				"test/demo_site/features/health/health_controller_test.gleam": {`get("/health")`},
 				"README.md":               {"howdy new --api-only", "curl http://127.0.0.1:8787/health"},
 				"dev/demo_site_dev.gleam": {"dev.new(fn() {"},
 			} {
@@ -399,9 +399,9 @@ func TestAPIProject(t *testing.T) {
 			}
 			if db != NoDatabase {
 				for path, want := range map[string]string{
-					"src/demo_site.gleam":             "|> howdy.controller(todos.controller(db))",
-					"src/demo_site/todos/todos.gleam": "pub fn all(",
-					"README.md":                       "`/api/todos`",
+					"src/demo_site.gleam":                      "|> howdy.controller(todos.controller(db))",
+					"src/demo_site/features/todos/todos.gleam": "pub fn all(",
+					"README.md": "`/api/todos`",
 				} {
 					if !strings.Contains(byPath[path], want) {
 						t.Errorf("%s (%s) should contain %q", path, label, want)

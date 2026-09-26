@@ -18,7 +18,7 @@ development and a test database. `--database sqlite` is the default, and
 `--no-database` gives a page-only project. The layout is a trimmed-down
 version of `howdy_example`.
 
-Every project has a 404 page, `site/pages/not_found_page.gleam`, rendered
+Every project has a 404 page, `features/site/pages/not_found_page.gleam`, rendered
 with its default layout. Middleware in `platform/not_found.gleam` shows it
 for a 404 when the request's `Accept` header prefers HTML, as a browser's
 does; API clients, `fetch` and curl get Howdy's JSON error, and a 404 page a
@@ -45,7 +45,7 @@ Pass `--minimal` to leave all three out.
 Pass `--api-only` for a JSON backend with no pages: the project leaves out
 Howdy UI and Lustre, the home page, layouts, static files, the stylesheet
 task and the HTML 404 page, and serves a health check at `GET /health`
-(`src/<project>/health/health_controller.gleam`) instead. A request no
+(`src/<project>/features/health/health_controller.gleam`) instead. A request no
 route matches gets Howdy's JSON 404 error through `howdy.not_found`. With a
 database it keeps the todos JSON API, and it combines with `--minimal` and
 `--database` as usual. In a project without `howdy_ui` in `gleam.toml` the
@@ -83,7 +83,7 @@ Inside a project with a database:
 howdy create controller users user name:string age:int
 ```
 
-creates the slice `src/<project>/users/`:
+creates the slice `src/<project>/features/users/`:
 
 | File | Holds |
 | --- | --- |
@@ -104,7 +104,7 @@ module; the second (singular) names the record module and type. Fields are
 `name:type` with the types `string`, `int`, `float` and `bool`; a bare name
 is a string, and every record gets an integer `id`. The command also writes
 `migrations/create_users.gleam` with the next migration version and tests
-in `test/<project>/users/` (`users_test.gleam` for the database operations,
+in `test/<project>/features/users/` (`users_test.gleam` for the database operations,
 `users_controller_test.gleam` for the routes), registers the controller
 in `src/<project>.gleam` and the migration in `platform/database.gleam`,
 and runs `gleam format`. If either of those two files no longer has the
@@ -178,7 +178,7 @@ For a single page, in any project,
 howdy create page blog about
 ```
 
-writes `src/<project>/blog/pages/about_page.gleam`, a page ready for your
+writes `src/<project>/features/blog/pages/about_page.gleam`, a page ready for your
 content, and adds its route to `blog/blog_controller.gleam`, beside the
 `pages` folder: the page is at
 `/blog/about`, or at `/blog` for a page named `index`. If the controller does
@@ -187,7 +187,7 @@ the page is added to its routes and served under the path the controller
 already uses (so `howdy create page site contact` gives `/contact`). A page
 whose file already exists, or whose path the controller already routes, is
 refused and nothing is written. A test that the page responds goes in
-`test/<project>/blog/pages/`.
+`test/<project>/features/blog/pages/`.
 
 ```sh
 howdy create live_page blog editor
@@ -235,7 +235,7 @@ howdy create component blog post_card
 With one name the component is global, in
 `src/<project>/components/price_tag_component.gleam`; with a controller
 first it belongs to that controller, in
-`src/<project>/blog/components/post_card_component.gleam`, and the
+`src/<project>/features/blog/components/post_card_component.gleam`, and the
 controller must exist. Pages add `price_tag_component.view()` to their
 content.
 

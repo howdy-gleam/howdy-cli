@@ -9,7 +9,7 @@ import howdy/database
 {{- end}}
 import howdy/service
 import {{.Project.Name}}/platform/errors
-import {{.Project.Name}}/{{.Plural}}/{{.Singular}}.{type New{{.Type}}, type {{.Type}}}
+import {{.Project.FeatureImport .Plural}}/{{.Singular}}.{type New{{.Type}}, type {{.Type}}}
 
 pub fn all(db: Repo) -> service.Result(List({{.Type}})) {
   query.from({{.Singular}}.table())

@@ -94,23 +94,23 @@ func TestControllerComponents(t *testing.T) {
 	c.Register()
 
 	card := createComponent(t, p, "posts", "card", false)
-	if card.File() != "src/demo_site/posts/components/card_component.gleam" {
+	if card.File() != "src/demo_site/features/posts/components/card_component.gleam" {
 		t.Errorf("File = %s", card.File())
 	}
 	comments := createComponent(t, p, "posts", "comments", true)
 	if comments.URL() != "/posts/components/comments/live" {
 		t.Errorf("URL = %s", comments.URL())
 	}
-	controller := read(t, p, "src/demo_site/posts/posts_controller.gleam")
+	controller := read(t, p, "src/demo_site/features/posts/posts_controller.gleam")
 	socket := strings.Index(controller, `controller.get("/components/comments/live", comments_component.socket)`)
 	id := strings.Index(controller, `controller.get("/:id"`)
 	if socket < 0 || socket > id {
 		t.Errorf("the socket should be routed before /:id:\n%s", controller)
 	}
-	if !strings.Contains(controller, "import demo_site/posts/components/comments_component\n") {
+	if !strings.Contains(controller, "import demo_site/features/posts/components/comments_component\n") {
 		t.Error("the controller should import the component")
 	}
-	if !strings.Contains(read(t, p, "test/demo_site/posts/components/comments_component_test.gleam"), `testing.get("/posts/components/comments/live")`) {
+	if !strings.Contains(read(t, p, "test/demo_site/features/posts/components/comments_component_test.gleam"), `testing.get("/posts/components/comments/live")`) {
 		t.Error("the test should reach the socket")
 	}
 	if _, err := NewComponent(p, "posts", "comments", true, false); err == nil {

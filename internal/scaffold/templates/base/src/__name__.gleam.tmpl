@@ -21,11 +21,11 @@ import howdy/telemetry
 {{- end}}
 import logging
 {{- if .API}}
-import {{.Name}}/health/health_controller as health
+import {{.Name}}/features/health/health_controller as health
 {{- end}}
 {{- if not .API}}
 import {{.Name}}/platform/not_found
-import {{.Name}}/site/site_controller as site
+import {{.Name}}/features/site/site_controller as site
 {{- end}}
 
 /// Everything the app is built from, made once at startup: by `main`, by

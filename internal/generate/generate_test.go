@@ -106,7 +106,7 @@ func TestReturningFollowsTheProjectsDependencies(t *testing.T) {
 		if _, err := c.Write(); err != nil {
 			t.Fatal(err)
 		}
-		context := read(t, p, "src/demo_site/users/users.gleam")
+		context := read(t, p, "src/demo_site/features/users/users.gleam")
 		if !strings.Contains(context, tc.want) || strings.Contains(context, tc.avoid) {
 			t.Errorf("howdy_database=%v: context should contain %q and not %q:\n%s", tc.current, tc.want, tc.avoid, context)
 		}
@@ -134,13 +134,13 @@ func TestWriteAndRegister(t *testing.T) {
 		t.Errorf("registration needed a hand: %v", notes)
 	}
 	for path, want := range map[string]string{
-		"src/demo_site/users/user.gleam":                   "User(id: Int, name: String, age: Int, admin: Bool)",
-		"src/demo_site/users/users.gleam":                  "pub fn update(db: Repo, id: Int, input: NewUser)",
-		"src/demo_site/users/users_controller.gleam":       `controller.new("api/users")`,
-		"src/demo_site/migrations/create_users.gleam":      `sqlite.column("admin", sqlite.Integer)`,
-		"test/demo_site/users/users_controller_test.gleam": `testing.put("/api/users/1", changed())`,
-		"src/demo_site.gleam":                              "|> howdy.controller(users_controller.controller(db))",
-		"src/demo_site/platform/database.gleam":            "create_todos.migration(), create_users.migration()]",
+		"src/demo_site/features/users/user.gleam":                   "User(id: Int, name: String, age: Int, admin: Bool)",
+		"src/demo_site/features/users/users.gleam":                  "pub fn update(db: Repo, id: Int, input: NewUser)",
+		"src/demo_site/features/users/users_controller.gleam":       `controller.new("api/users")`,
+		"src/demo_site/migrations/create_users.gleam":               `sqlite.column("admin", sqlite.Integer)`,
+		"test/demo_site/features/users/users_controller_test.gleam": `testing.put("/api/users/1", changed())`,
+		"src/demo_site.gleam":                                       "|> howdy.controller(users_controller.controller(db))",
+		"src/demo_site/platform/database.gleam":                     "create_todos.migration(), create_users.migration()]",
 	} {
 		content := read(t, p, path)
 		if !strings.Contains(content, want) {
@@ -150,7 +150,7 @@ func TestWriteAndRegister(t *testing.T) {
 			t.Errorf("unrendered template markers in %s", path)
 		}
 	}
-	for _, imp := range []string{"import demo_site/users/users_controller\n"} {
+	for _, imp := range []string{"import demo_site/features/users/users_controller\n"} {
 		if !strings.Contains(read(t, p, "src/demo_site.gleam"), imp) {
 			t.Errorf("src/demo_site.gleam should contain %q", imp)
 		}
@@ -177,7 +177,7 @@ func TestWriteAndRegister(t *testing.T) {
 	if !strings.Contains(read(t, p, "src/demo_site/platform/database.gleam"), "create_users.migration(), create_orders.migration()]") {
 		t.Error("second migration was not appended")
 	}
-	if !strings.Contains(read(t, p, "src/demo_site/orders/order.gleam"), "fn number()") {
+	if !strings.Contains(read(t, p, "src/demo_site/features/orders/order.gleam"), "fn number()") {
 		t.Error("float fields need the lenient JSON decoder")
 	}
 
@@ -199,8 +199,8 @@ func TestRepoHasNoController(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []string{
-		"src/demo_site/users/user.gleam", "src/demo_site/users/users.gleam",
-		"src/demo_site/migrations/create_users.gleam", "test/demo_site/users/users_test.gleam",
+		"src/demo_site/features/users/user.gleam", "src/demo_site/features/users/users.gleam",
+		"src/demo_site/migrations/create_users.gleam", "test/demo_site/features/users/users_test.gleam",
 	}
 	if strings.Join(written, " ") != strings.Join(want, " ") {
 		t.Errorf("wrote %v, want %v", written, want)
@@ -214,7 +214,7 @@ func TestRepoHasNoController(t *testing.T) {
 	if !strings.Contains(read(t, p, "src/demo_site/platform/database.gleam"), "create_users.migration()]") {
 		t.Error("the migration should be registered")
 	}
-	if !strings.Contains(read(t, p, "test/demo_site/users/users_test.gleam"), `user.UserInput(name: "First name", age: 1)`) {
+	if !strings.Contains(read(t, p, "test/demo_site/features/users/users_test.gleam"), `user.UserInput(name: "First name", age: 1)`) {
 		t.Error("the context test should build fixtures through validate")
 	}
 }
@@ -237,16 +237,16 @@ func TestPages(t *testing.T) {
 		t.Errorf("registration needed a hand: %v", notes)
 	}
 	for path, want := range map[string]string{
-		"src/demo_site/blog_posts/blog_posts_controller.gleam":       `controller.new("blog_posts")`,
-		"src/demo_site/blog_posts/pages/index_page.gleam":            `helpers.yes_no(item.published)`,
-		"src/demo_site/blog_posts/pages/show_page.gleam":             `"Back to blog posts"`,
-		"src/demo_site/blog_posts/pages/new_page.gleam":              `"New blog post"`,
-		"src/demo_site/blog_posts/pages/edit_page.gleam":             `"Edit blog post"`,
-		"src/demo_site/platform/pages.gleam":                         "pub fn read_form(",
-		"priv/public/assets/style.css":                               ".page-table",
-		"src/demo_site/platform/pages.gleam#":                        "default_layout.render(ctx, \"Something went wrong\"",
-		"test/demo_site/blog_posts/blog_posts_controller_test.gleam": `#("title", "First title"), #("views", "1"), #("rating", "1.5")`,
-		"src/demo_site.gleam":                                        "|> howdy.controller(blog_posts_controller.controller(db))",
+		"src/demo_site/features/blog_posts/blog_posts_controller.gleam":       `controller.new("blog_posts")`,
+		"src/demo_site/features/blog_posts/pages/index_page.gleam":            `helpers.yes_no(item.published)`,
+		"src/demo_site/features/blog_posts/pages/show_page.gleam":             `"Back to blog posts"`,
+		"src/demo_site/features/blog_posts/pages/new_page.gleam":              `"New blog post"`,
+		"src/demo_site/features/blog_posts/pages/edit_page.gleam":             `"Edit blog post"`,
+		"src/demo_site/platform/pages.gleam":                                  "pub fn read_form(",
+		"priv/public/assets/style.css":                                        ".page-table",
+		"src/demo_site/platform/pages.gleam#":                                 "default_layout.render(ctx, \"Something went wrong\"",
+		"test/demo_site/features/blog_posts/blog_posts_controller_test.gleam": `#("title", "First title"), #("views", "1"), #("rating", "1.5")`,
+		"src/demo_site.gleam":                                                 "|> howdy.controller(blog_posts_controller.controller(db))",
 	} {
 		content := read(t, p, strings.TrimSuffix(path, "#"))
 		if !strings.Contains(content, want) {
@@ -256,7 +256,7 @@ func TestPages(t *testing.T) {
 			t.Errorf("unrendered template markers in %s", path)
 		}
 	}
-	helpers := read(t, p, "src/demo_site/blog_posts/pages/helpers.gleam")
+	helpers := read(t, p, "src/demo_site/features/blog_posts/pages/helpers.gleam")
 	for _, want := range []string{
 		`use views <- pages.whole_number(form, "views")`,
 		`use rating <- pages.number(form, "rating")`,
@@ -290,7 +290,7 @@ func TestPages(t *testing.T) {
 	if got, _ := os.ReadFile(shared); string(got) != "// mine\n" {
 		t.Error("existing shared helpers should be kept")
 	}
-	if !strings.Contains(read(t, p, "src/demo_site/users/pages/helpers.gleam"), "_errors: List(service.FieldError)") {
+	if !strings.Contains(read(t, p, "src/demo_site/features/users/pages/helpers.gleam"), "_errors: List(service.FieldError)") {
 		t.Error("checkbox-only pages should not leave errors unused")
 	}
 }
@@ -341,7 +341,7 @@ func TestPostgresColumns(t *testing.T) {
 	if !strings.Contains(read(t, p, "src/demo_site/migrations/create_users.gleam"), `pg.column("admin", pg.Boolean)`) {
 		t.Error("migration should use Postgres column types")
 	}
-	if strings.Contains(read(t, p, "src/demo_site/users/user.gleam"), "n != 0") {
+	if strings.Contains(read(t, p, "src/demo_site/features/users/user.gleam"), "n != 0") {
 		t.Error("Postgres booleans decode directly")
 	}
 }

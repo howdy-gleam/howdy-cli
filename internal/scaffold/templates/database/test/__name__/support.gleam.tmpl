@@ -4,7 +4,7 @@ import gloo/adapter/sqlite
 import gloo/repo.{type Repo}
 import {{.Name}}
 import {{.Name}}/platform/database
-import {{.Name}}/todos/todo_item
+import {{.Name}}/features/todos/todo_item
 
 pub fn with_db(run_test: fn(Repo) -> a) -> a {
   let assert Ok(db) = sqlite.start(sqlite.memory())

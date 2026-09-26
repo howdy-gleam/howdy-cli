@@ -25,8 +25,8 @@ import howdy/service
 import howdy/testing
 import {{.Name}}
 {{- if .Database}}
-import {{.Name}}/todos/todo_item.{type Todo, TodoInput}
-import {{.Name}}/todos/todos
+import {{.Name}}/features/todos/todo_item.{type Todo, TodoInput}
+import {{.Name}}/features/todos/todos
 {{- end}}
 
 /// What the running server exposed at startup. Fails on a node where the

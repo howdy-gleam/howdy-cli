@@ -15,8 +15,8 @@ import (
 // the project does not have it yet.
 type Page struct {
 	Project *Project
-	// Controller names the folder and the controller module, e.g. "blog"
-	// for src/<project>/blog/blog_controller.gleam.
+	// Controller names the feature folder and the controller module, e.g.
+	// "blog" for src/<project>/features/blog/blog_controller.gleam.
 	Controller string
 	// Name names the page module without its suffix, e.g. "about" for
 	// blog/pages/about_page.gleam.
@@ -50,9 +50,6 @@ func NewPage(p *Project, controller, name string, live bool, layout string, addA
 	}
 	if gleamKeywords[controller] {
 		return nil, fmt.Errorf("%q is a Gleam keyword and cannot name a folder of modules; pick another name", controller)
-	}
-	if err := p.projectFolder(controller); err != nil {
-		return nil, err
 	}
 	layout, err := p.ResolveLayout(layout)
 	if err != nil {
@@ -113,11 +110,11 @@ func (pg *Page) ControllerModule() string { return pg.Controller + "_controller"
 
 // File and ControllerFile are relative to the project directory.
 func (pg *Page) File() string {
-	return filepath.ToSlash(filepath.Join("src", pg.Project.Name, pg.Controller, "pages", pg.Module()+".gleam"))
+	return filepath.ToSlash(filepath.Join(pg.Project.FeatureDir(pg.Controller), "pages", pg.Module()+".gleam"))
 }
 
 func (pg *Page) ControllerFile() string {
-	return filepath.ToSlash(filepath.Join("src", pg.Project.Name, pg.Controller, pg.ControllerModule()+".gleam"))
+	return filepath.ToSlash(filepath.Join(pg.Project.FeatureDir(pg.Controller), pg.ControllerModule()+".gleam"))
 }
 
 // Title names the page for people, e.g. "Contact us". An index page is
@@ -221,7 +218,7 @@ func (pg *Page) Files() ([]File, error) {
 }
 
 func (pg *Page) testFile() string {
-	return filepath.ToSlash(filepath.Join("test", pg.Project.Name, pg.Controller, "pages", pg.Module()+"_test.gleam"))
+	return filepath.ToSlash(filepath.Join(pg.Project.FeatureTestDir(pg.Controller), "pages", pg.Module()+"_test.gleam"))
 }
 
 // Write creates the files, refusing to replace any that exist, except that
@@ -280,7 +277,7 @@ func (pg *Page) Register() (notes []string) {
 	if pg.Live {
 		fmt.Fprintf(&routes, "|> controller.get(%q, %s.socket)\n", pg.SocketRoute(), pg.Module())
 	}
-	importLine := fmt.Sprintf("import %s/%s/pages/%s", p.Name, pg.Controller, pg.Module())
+	importLine := fmt.Sprintf("import %s/pages/%s", p.FeatureImport(pg.Controller), pg.Module())
 	if err := appendToFunction(filepath.Join(p.Dir, pg.ControllerFile()), "controller", importLine, routes.String()); err != nil {
 		notes = append(notes, fmt.Sprintf("Add the page to %s: %s, and add %s to the routes in its controller function.",
 			pg.ControllerFile(), importLine, strings.TrimSpace(strings.ReplaceAll(routes.String(), "\n", " "))))
@@ -294,15 +291,15 @@ func (pg *Page) Register() (notes []string) {
 		controller = pg.ControllerModule() + ".controller(services.identity)"
 	}
 	err := edit(filepath.Join(p.Dir, root),
-		fmt.Sprintf("import %s/%s/%s", p.Name, pg.Controller, pg.ControllerModule()),
+		fmt.Sprintf("import %s/%s", p.FeatureImport(pg.Controller), pg.ControllerModule()),
 		// Before the first controller, so it stays ahead of the static
 		// catch-all.
 		regexp.MustCompile(`(?m)^(\s*)howdy\.new\(\)\n`),
 		"${0}${1}|> howdy.controller("+controller+")\n",
 	)
 	if err != nil {
-		notes = append(notes, fmt.Sprintf("Register the controller in %s: import %s/%s/%s and add |> howdy.controller(%s) before the static controller.",
-			root, p.Name, pg.Controller, pg.ControllerModule(), controller))
+		notes = append(notes, fmt.Sprintf("Register the controller in %s: import %s/%s and add |> howdy.controller(%s) before the static controller.",
+			root, p.FeatureImport(pg.Controller), pg.ControllerModule(), controller))
 	}
 	return notes
 }

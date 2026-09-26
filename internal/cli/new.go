@@ -216,11 +216,11 @@ func nextSteps(project *scaffold.Project) []tui.Command {
 func notes(project *scaffold.Project) []string {
 	n := project.Name
 	notes := []string{
-		fmt.Sprintf("The home page lives in src/%s/site/site_controller.gleam. Static files go in priv/public.", n),
+		fmt.Sprintf("The home page lives in src/%s/features/site/site_controller.gleam. Static files go in priv/public.", n),
 	}
 	if project.API {
 		notes = []string{
-			fmt.Sprintf("The health check lives in src/%s/health/health_controller.gleam. Add controllers beside it and", n),
+			fmt.Sprintf("The health check lives in src/%s/features/health/health_controller.gleam. Add features beside it and", n),
 			fmt.Sprintf("register them in src/%s.gleam; unknown routes answer with Howdy's JSON 404.", n),
 		}
 	}
@@ -232,12 +232,12 @@ func notes(project *scaffold.Project) []string {
 	}
 	if project.Database != scaffold.NoDatabase {
 		notes = append(notes,
-			fmt.Sprintf("Todos live in src/%s/todos/ (record, database operations, JSON API at /api/todos)", n),
-			fmt.Sprintf("and the live list in src/%s/site/todo_list.gleam. Migrations are in src/%s/migrations/.", n, n),
+			fmt.Sprintf("Todos live in src/%s/features/todos/ (record, database operations, JSON API at /api/todos)", n),
+			fmt.Sprintf("and the live list in src/%s/features/site/todo_list.gleam. Migrations are in src/%s/migrations/.", n, n),
 		)
 		if project.API {
 			notes[len(notes)-1] = fmt.Sprintf("Migrations are in src/%s/migrations/.", n)
-			notes[len(notes)-2] = fmt.Sprintf("Todos live in src/%s/todos/ (record, database operations, JSON API at /api/todos).", n)
+			notes[len(notes)-2] = fmt.Sprintf("Todos live in src/%s/features/todos/ (record, database operations, JSON API at /api/todos).", n)
 		}
 	}
 	env := "Copy .env.example to .env to change the port."

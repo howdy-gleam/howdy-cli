@@ -157,15 +157,16 @@ src/
 ├── console.gleam             # console shortcuts
 {{- end}}
 ├── {{.Name}}/
+│   ├── features/
+│   │   ├── site/
+│   │   │   ├── site_controller.gleam  # the home page and the live socket route
+│   │   │   └── todo_list.gleam        # the live todo list component
+│   │   └── todos/
+│   │       ├── todo_item.gleam    # record, validation, JSON codecs, Gloo table
+│   │       ├── todos.gleam        # context: every database operation on todos
+│   │       └── todo_controller.gleam  # JSON API
 │   ├── layouts/
 │   │   └── default_layout.gleam   # what every page is rendered inside
-│   ├── site/
-│   │   ├── site_controller.gleam  # the home page and the live socket route
-│   │   └── todo_list.gleam        # the live todo list component
-│   ├── todos/
-│   │   ├── todo_item.gleam    # record, validation, JSON codecs, Gloo table
-│   │   ├── todos.gleam        # context: every database operation on todos
-│   │   └── todo_controller.gleam  # JSON API
 │   ├── migrations/
 │   │   └── create_todos.gleam # version 1
 │   └── platform/
@@ -182,9 +183,11 @@ docker/postgres/init.sql       # creates the test database on first start
 test/
 ```
 
-Features live in a folder each under `src/{{.Name}}/`, with their record,
-context and controller together; register controllers in
-`src/{{.Name}}.gleam`. To change the schema, add a new migration file with
+Features live in a folder each under `src/{{.Name}}/features/`, with their
+record, context and controller together; register controllers in
+`src/{{.Name}}.gleam`. The other folders in `src/{{.Name}}/` belong to
+Howdy's generators, so a feature can have any name without clashing with
+them. To change the schema, add a new migration file with
 the next version and list it in `platform/database.gleam`; never edit a
 migration that has already been applied.
 
@@ -207,7 +210,7 @@ default layout, or another one with `--layout <name>`, and
 
 ## The 404 page
 
-An address the site does not have shows `src/{{.Name}}/site/pages/not_found_page.gleam`
+An address the site does not have shows `src/{{.Name}}/features/site/pages/not_found_page.gleam`
 to people, rendered with the default layout, and change it as you like.
 API clients, `fetch` and curl get Howdy's JSON error instead: the middleware in
 `src/{{.Name}}/platform/not_found.gleam` shows the page only when the request's

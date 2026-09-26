@@ -26,12 +26,12 @@ import howdy/auth.{type Auth}
 import howdy/controller
 import howdy/param
 import {{.Project.Name}}/platform/pages
-import {{.Project.Name}}/{{.Plural}}/pages/edit_page
-import {{.Project.Name}}/{{.Plural}}/pages/helpers
-import {{.Project.Name}}/{{.Plural}}/pages/index_page
-import {{.Project.Name}}/{{.Plural}}/pages/new_page
-import {{.Project.Name}}/{{.Plural}}/pages/show_page
-import {{.Project.Name}}/{{.Plural}}/{{.Plural}}
+import {{.Project.FeatureImport .Plural}}/pages/edit_page
+import {{.Project.FeatureImport .Plural}}/pages/helpers
+import {{.Project.FeatureImport .Plural}}/pages/index_page
+import {{.Project.FeatureImport .Plural}}/pages/new_page
+import {{.Project.FeatureImport .Plural}}/pages/show_page
+import {{.Project.FeatureImport .Plural}}/{{.Plural}}
 
 {{- if .Auth}}
 pub fn controller(db: Repo, identity: Auth) {

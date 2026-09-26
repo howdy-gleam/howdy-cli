@@ -84,7 +84,7 @@ func Open(dir string) (*Project, error) {
 	return p, nil
 }
 
-// Slice is a feature folder to generate: a record, its database operations,
+// Slice is a feature folder to generate in src/<project>/features/: a record, its database operations,
 // a migration and tests, with or without a JSON controller.
 type Slice struct {
 	Project *Project
@@ -181,9 +181,6 @@ func NewSlice(p *Project, plural, singular string, fields []string) (*Slice, err
 			return nil, fmt.Errorf("%q would clash with a module the generated code imports; pick another name", name)
 		}
 	}
-	if err := p.projectFolder(plural); err != nil {
-		return nil, err
-	}
 	if reservedTypes[pascal(singular)] {
 		return nil, fmt.Errorf("%q would shadow Gleam's %s type; pick another name", singular, pascal(singular))
 	}
@@ -213,14 +210,29 @@ func (p *Project) NeedsAuth() error {
 	return errors.New("--add-auth guards the routes with Howdy Auth, which this project does not have (no howdy_auth in gleam.toml); run 'howdy add auth' first")
 }
 
-// projectFolder refuses a name whose folder under src/<project>/ holds the
-// project's own code rather than a feature.
-func (p *Project) projectFolder(name string) error {
-	holds := map[string]string{"layouts": "layouts", "platform": "shared code", "migrations": "migrations", "components": "global components"}[name]
-	if holds == "" {
-		return nil
-	}
-	return fmt.Errorf("src/%s/%s/ holds the project's %s; pick another name", p.Name, name, holds)
+// features is the folder under src/<project>/ and test/<project>/ that
+// holds a folder for each feature. Keeping features apart from the folders
+// Howdy writes itself (layouts, platform, migrations, components and the
+// like) lets a feature have any name, and Howdy add folders of its own,
+// without the two clashing.
+const features = "features"
+
+// FeatureDir is a feature's folder of code, relative to the project
+// directory, e.g. src/<project>/features/users.
+func (p *Project) FeatureDir(name string) string {
+	return filepath.Join("src", p.Name, features, name)
+}
+
+// FeatureTestDir is the folder of a feature's tests, relative to the
+// project directory.
+func (p *Project) FeatureTestDir(name string) string {
+	return filepath.Join("test", p.Name, features, name)
+}
+
+// FeatureImport is the module path of a feature's folder, e.g.
+// "my_app/features/users", for templates to import its modules from.
+func (p *Project) FeatureImport(name string) string {
+	return p.Name + "/" + features + "/" + name
 }
 
 func invalidName(name string) error {
@@ -313,7 +325,7 @@ type File struct {
 // test/<project>/support.gleam, which they rely on.
 func (c *Slice) Files() ([]File, error) {
 	p := c.Project
-	slice := filepath.Join("src", p.Name, c.Plural)
+	slice := p.FeatureDir(c.Plural)
 	type target struct {
 		template, path string
 		shared         bool
@@ -342,7 +354,7 @@ func (c *Slice) Files() ([]File, error) {
 		)
 	}
 	if _, err := os.Stat(filepath.Join(p.Dir, "test", p.Name, "support.gleam")); err == nil && !c.MigrationOnly {
-		tests := filepath.Join("test", p.Name, c.Plural)
+		tests := p.FeatureTestDir(c.Plural)
 		targets = append(targets, target{template: "context_test.gleam.tmpl", path: filepath.Join(tests, c.Plural+"_test.gleam")})
 		if c.Routes {
 			targets = append(targets, target{template: "controller_test.gleam.tmpl", path: filepath.Join(tests, c.ControllerModule()+"_test.gleam")})

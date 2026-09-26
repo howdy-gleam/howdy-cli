@@ -8,7 +8,7 @@ import gloo/sql
 import howdy/database
 import howdy/service
 import {{.Name}}/platform/errors
-import {{.Name}}/todos/todo_item.{type NewTodo, type Todo}
+import {{.Name}}/features/todos/todo_item.{type NewTodo, type Todo}
 
 pub fn all(db: Repo) -> service.Result(List(Todo)) {
   query.from(todo_item.table())
@@ -27,7 +27,7 @@ pub fn find(db: Repo, id: Int) -> service.Result(Todo) {
 pub fn create(db: Repo, input: NewTodo) -> service.Result(Todo) {
   query.insert(query.from(todo_item.table()), todo_item.table(), [
     #("title", sql.string(todo_item.title(input))),
-    #("done", sql.int(0)),
+    #("done", sql.bool(False)),
   ])
   |> query.returning_columns(["id", "title", "done"])
   |> query.returning(todo_item.table().decoder)
@@ -36,12 +36,8 @@ pub fn create(db: Repo, input: NewTodo) -> service.Result(Todo) {
 }
 
 pub fn set_done(db: Repo, id: Int, done: Bool) -> service.Result(Todo) {
-  let flag = case done {
-    True -> 1
-    False -> 0
-  }
   query.from(todo_item.table())
-  |> query.update([#("done", sql.int(flag))])
+  |> query.update([#("done", sql.bool(done))])
   |> query.where(query.Eq("id", sql.int(id)))
   |> returning_todo(db, _)
 }

@@ -11,7 +11,7 @@ import lustre/attribute as a
 import lustre/element.{text}
 import lustre/element/html as h
 import {{.Name}}/layouts/default_layout
-import {{.Name}}/site/todo_list
+import {{.Name}}/features/site/todo_list
 
 pub fn controller(db: Repo) {
   controller.new("")
@@ -48,11 +48,11 @@ fn home(ctx: controller.Context) {
       ui.h2("Where things are"),
       h.ul([a.class("home-list")], [
         h.li([], [
-          h.code([], [text("src/{{.Name}}/site/todo_list.gleam")]),
+          h.code([], [text("src/{{.Name}}/features/site/todo_list.gleam")]),
           text(" is the live todo list above."),
         ]),
         h.li([], [
-          h.code([], [text("src/{{.Name}}/todos/")]),
+          h.code([], [text("src/{{.Name}}/features/todos/")]),
           text(" holds the record, the database operations and the JSON API at "),
           h.code([], [text("/api/todos")]),
           text("."),

@@ -13,7 +13,7 @@ import lustre/attribute as a
 {{- end}}
 import lustre/element.{type Element}
 import {{.Project.Name}}/platform/pages
-import {{.Project.Name}}/{{.Plural}}/{{.Singular}}.{type New{{.Type}}, type {{.Type}}}
+import {{.Project.FeatureImport .Plural}}/{{.Singular}}.{type New{{.Type}}, type {{.Type}}}
 
 /// The page that shows a {{.Singular}}.
 pub fn path(item: {{.Type}}) -> String {

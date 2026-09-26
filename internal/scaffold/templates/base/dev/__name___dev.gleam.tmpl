@@ -27,7 +27,7 @@ import howdy/telemetry/recorder
 {{- end}}
 import {{.Name}}
 {{- if not .API}}
-import {{.Name}}/site/site_controller as site
+import {{.Name}}/features/site/site_controller as site
 {{- end}}
 
 pub fn main() -> Nil {

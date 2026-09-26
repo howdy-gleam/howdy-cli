@@ -2,7 +2,7 @@ import gleam/dynamic/decode
 import gleam/json
 import howdy/testing
 import {{.Project.Name}}/support
-import {{.Project.Name}}/{{.Plural}}/{{.Singular}}
+import {{.Project.FeatureImport .Plural}}/{{.Singular}}
 
 fn first() -> json.Json {
   json.object([

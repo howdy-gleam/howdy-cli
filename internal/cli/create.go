@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -115,7 +116,7 @@ func createComponentCommand(live bool) *cobra.Command {
 		Long: `Create a component: a view function that returns an element, for pages to
 reuse. With one name it is global, in src/<project>/components/; with a
 controller first it belongs to that controller, in
-src/<project>/<controller>/components/. The module is <name>_component.gleam
+src/<project>/features/<controller>/components/. The module is <name>_component.gleam
 and pages call <name>_component.view(). The controller must exist.
 
 A component that already exists is refused and nothing is written. A test
@@ -137,7 +138,7 @@ that it renders is written beside the other tests.`,
 view run on the server, with the browser showing each change it sends over
 a WebSocket. With one name it is global, in src/<project>/components/; with
 a controller first it belongs to that controller, in
-src/<project>/<controller>/components/. The controller must exist.
+src/<project>/features/<controller>/components/. The controller must exist.
 
 The module is <name>_component.gleam. Pages put it on the page with
 <name>_component.mount(), and render with their layout's render_live, which
@@ -309,7 +310,7 @@ func createPageCommand(live bool) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "page <controller> <page>",
 		Short: "Create a page and add it to a controller, creating the controller if needed",
-		Long: `Create src/<project>/<controller>/pages/<page>_page.gleam, a page ready for
+		Long: `Create src/<project>/features/<controller>/pages/<page>_page.gleam, a page ready for
 your content, and add its route to <controller>_controller.gleam, which sits
 beside the pages folder. The page is at /<controller>/<page>, or at /<controller> for a page
 named index.
@@ -319,7 +320,7 @@ src/<project>.gleam. If it does, the page is added to it and served under
 whatever path the controller already uses. A page that already exists, or
 a route the controller already has, is refused and nothing is written.
 
-A test that the page responds is written to test/<project>/<controller>/pages/.
+A test that the page responds is written to test/<project>/features/<controller>/pages/.
 
 With --add-auth, a controller it creates guards every route with Howdy
 Auth, so only someone signed in reaches them; the project needs 'howdy add
@@ -334,7 +335,7 @@ auth' first. A controller that exists keeps its guard, or lack of one, and
 	if live {
 		cmd.Use = "live_page <controller> <page>"
 		cmd.Short = "Create a page with a live section and add it to a controller, creating the controller if needed"
-		cmd.Long = `Create src/<project>/<controller>/pages/<page>_page.gleam, a page with a
+		cmd.Long = `Create src/<project>/features/<controller>/pages/<page>_page.gleam, a page with a
 live section ready for your content: a Lustre server component whose model,
 update and view run on the server, with the browser showing each change it
 sends over a WebSocket. The page's routes are added to
@@ -347,7 +348,7 @@ src/<project>.gleam. If it does, the page is added to it and served under
 whatever path the controller already uses. A page that already exists, or
 a route the controller already has, is refused and nothing is written.
 
-A test that the page responds is written to test/<project>/<controller>/pages/.
+A test that the page responds is written to test/<project>/features/<controller>/pages/.
 
 With --add-auth, a controller it creates guards every route with Howdy
 Auth, so only someone signed in reaches them; the project needs 'howdy add
@@ -443,8 +444,8 @@ func createControllerCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "controller <plural> <singular> <field:type>...",
 		Short: "Create a JSON controller with its record, database operations and migration",
-		Long: `Create a slice of the current project: a folder under src/<project>/ named
-after the plural, holding
+		Long: `Create a slice of the current project: a folder under
+src/<project>/features/ named after the plural, holding
 
   <singular>.gleam            the record: types, validation and JSON codecs
   <plural>.gleam              the database operations: all, find, create, update, delete
@@ -484,7 +485,7 @@ func createRepoCommand() *cobra.Command {
 		Use:   "repo <plural> <singular> <field:type>...",
 		Short: "Create a record with its database operations and migration, without a controller",
 		Long: `Create a slice of the current project without routes: a folder under
-src/<project>/ named after the plural, holding
+src/<project>/features/ named after the plural, holding
 
   <singular>.gleam   the record: types, validation and JSON codecs
   <plural>.gleam     the database operations: all, find, create, update, delete
@@ -514,7 +515,7 @@ func createPagesCommand() *cobra.Command {
 		Use:   "pages <plural> <singular> <field:type>...",
 		Short: "Create HTML pages to list, show, add, edit and delete a record, with its database operations and migration",
 		Long: `Create a slice of the current project with pages for people: a folder under
-src/<project>/ named after the plural, holding
+src/<project>/features/ named after the plural, holding
 
   <singular>.gleam              the record: types, validation and JSON codecs
   <plural>.gleam                the database operations: all, find, create, update, delete
@@ -690,7 +691,7 @@ func runCreateSlice(kind, plural, singular string, fields []string, layout strin
 		}, notes))
 		return nil
 	}
-	notes = append(notes, fmt.Sprintf("Add validation rules in src/%s/%s/%s.gleam.", project.Name, plural, singular))
+	notes = append(notes, fmt.Sprintf("Add validation rules in %s.gleam.", filepath.ToSlash(filepath.Join(project.FeatureDir(plural), singular))))
 	if slice.Auth {
 		notes = append(notes, "Only someone signed in reaches the routes; ctx.guard.user is the signed-in user.")
 	}
@@ -698,11 +699,11 @@ func runCreateSlice(kind, plural, singular string, fields []string, layout strin
 	switch {
 	case slice.Pages:
 		commands = append(commands, tui.Command{Cmd: "gleam dev", Note: fmt.Sprintf("then open http://127.0.0.1:8787/%s", plural)})
-		notes = append(notes, fmt.Sprintf("The pages are in src/%s/%s/pages/ and their routes in %s.gleam; the layout every set of pages shares is src/%s/platform/pages.gleam.", project.Name, plural, slice.PagesModule(), project.Name))
+		notes = append(notes, fmt.Sprintf("The pages are in %s/pages/ and their routes in %s.gleam; the layout every set of pages shares is src/%s/platform/pages.gleam.", filepath.ToSlash(project.FeatureDir(plural)), slice.PagesModule(), project.Name))
 	case slice.Routes:
 		commands = append(commands, tui.Command{Cmd: "gleam dev", Note: fmt.Sprintf("then try http://127.0.0.1:8787/api/%s", plural)})
 	default:
-		notes = append(notes, fmt.Sprintf("Use it from your code with import %s/%s/%s and %s.all(db).", project.Name, plural, plural, plural))
+		notes = append(notes, fmt.Sprintf("Use it from your code with import %s/%s and %s.all(db).", project.FeatureImport(plural), plural, plural))
 	}
 	fmt.Print(tui.NextSteps(plural, commands, notes))
 	return nil

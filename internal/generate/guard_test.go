@@ -65,13 +65,13 @@ func TestGuardedSlice(t *testing.T) {
 		t.Fatalf("registration needs a hand: %v", notes)
 	}
 	for _, module := range []string{"tasks_controller", "tasks_api_controller"} {
-		contains(t, p, "src/demo_site/tasks/"+module+".gleam",
+		contains(t, p, "src/demo_site/features/tasks/"+module+".gleam",
 			"import howdy/auth.{type Auth}",
 			"pub fn controller(db: Repo, identity: Auth) {",
 			"auth.required(identity))",
 			"  |> controller.build\n}",
 		)
-		contains(t, p, "test/demo_site/tasks/"+module+"_test.gleam",
+		contains(t, p, "test/demo_site/features/tasks/"+module+"_test.gleam",
 			"let token = support.sign_in(db)",
 			`testing.header("authorization", "Bearer " <> token)`,
 			"pub fn signing_in_is_required_test() {",
@@ -117,7 +117,7 @@ func TestUnguardedSliceIsUnchanged(t *testing.T) {
 	if notes := c.Register(); len(notes) > 0 {
 		t.Fatalf("registration needs a hand: %v", notes)
 	}
-	controller := read(t, p, "src/demo_site/notes/notes_controller.gleam")
+	controller := read(t, p, "src/demo_site/features/notes/notes_controller.gleam")
 	if strings.Contains(controller, "guarded") || strings.Contains(controller, "controller.build") {
 		t.Errorf("the controller should not be guarded:\n%s", controller)
 	}
@@ -137,7 +137,7 @@ func TestGuardedPageController(t *testing.T) {
 		t.Fatalf("registration needs a hand: %v", notes)
 	}
 	contains(t, p, "src/demo_site.gleam", "account_controller.controller(services.identity))")
-	contains(t, p, "test/demo_site/account/pages/index_page_test.gleam",
+	contains(t, p, "test/demo_site/features/account/pages/index_page_test.gleam",
 		`testing.header("authorization", "Bearer " <> support.sign_in(db))`,
 		"pub fn index_page_requires_signing_in_test() {",
 	)
@@ -153,7 +153,7 @@ func TestGuardedPageController(t *testing.T) {
 		t.Error("a live component in a guarded controller should know it is guarded")
 	}
 	// gleam format indents them when the command runs.
-	controller := read(t, p, "src/demo_site/account/account_controller.gleam")
+	controller := read(t, p, "src/demo_site/features/account/account_controller.gleam")
 	last := 0
 	for _, route := range []string{"index_page.show", "board_page.show", "board_page.socket", "feed_component.socket", "|> controller.build"} {
 		at := strings.Index(controller, route)
@@ -162,8 +162,8 @@ func TestGuardedPageController(t *testing.T) {
 		}
 		last = at
 	}
-	contains(t, p, "test/demo_site/account/pages/board_page_test.gleam", "support.sign_in(db)")
-	contains(t, p, "test/demo_site/account/components/feed_component_test.gleam", "support.sign_in(db)")
+	contains(t, p, "test/demo_site/features/account/pages/board_page_test.gleam", "support.sign_in(db)")
+	contains(t, p, "test/demo_site/features/account/components/feed_component_test.gleam", "support.sign_in(db)")
 }
 
 func TestAddAuthRefusesAnUnguardedController(t *testing.T) {

@@ -29,15 +29,15 @@ func (c *Slice) Register() (notes []string) {
 			controller = module + ".controller(db, services.identity)"
 		}
 		err := edit(filepath.Join(p.Dir, root),
-			fmt.Sprintf("import %s/%s/%s", p.Name, c.Plural, module),
+			"import "+p.FeatureImport(c.Plural)+"/"+module,
 			// Before the first controller, so it stays ahead of the static
 			// catch-all.
 			regexp.MustCompile(`(?m)^(\s*)howdy\.new\(\)\n`),
 			"${0}${1}|> howdy.controller("+controller+")\n",
 		)
 		if err != nil {
-			notes = append(notes, fmt.Sprintf("Register the controller in %s: import %s/%s/%s and add |> howdy.controller(%s) before the static controller.",
-				root, p.Name, c.Plural, module, controller))
+			notes = append(notes, fmt.Sprintf("Register the controller in %s: import %s/%s and add |> howdy.controller(%s) before the static controller.",
+				root, p.FeatureImport(c.Plural), module, controller))
 		}
 	}
 

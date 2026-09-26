@@ -25,14 +25,14 @@ import howdy/telemetry
 {{- end}}
 import logging
 {{- if .API}}
-import {{.Name}}/health/health_controller as health
+import {{.Name}}/features/health/health_controller as health
 {{- end}}
 import {{.Name}}/platform/database
 {{- if not .API}}
 import {{.Name}}/platform/not_found
-import {{.Name}}/site/site_controller as site
+import {{.Name}}/features/site/site_controller as site
 {{- end}}
-import {{.Name}}/todos/todo_controller as todos
+import {{.Name}}/features/todos/todo_controller as todos
 
 /// Everything the app is built from, made once at startup: by `main`, by
 /// `dev/` with development versions, and by the tests. Controllers take what

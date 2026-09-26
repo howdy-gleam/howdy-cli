@@ -1,6 +1,6 @@
 import {{.Project.Name}}/support
-import {{.Project.Name}}/{{.Plural}}/{{.Singular}}
-import {{.Project.Name}}/{{.Plural}}/{{.Plural}}
+import {{.Project.FeatureImport .Plural}}/{{.Singular}}
+import {{.Project.FeatureImport .Plural}}/{{.Plural}}
 
 // Fixtures go through the same validator as requests.
 fn first() -> {{.Singular}}.New{{.Type}} {
