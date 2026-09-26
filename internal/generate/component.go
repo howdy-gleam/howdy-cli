@@ -38,6 +38,9 @@ const globalComponents = "components"
 // NewComponent validates the names, checks that a controller's component
 // belongs to a controller that exists, and that the component does not.
 func NewComponent(p *Project, controller, name string, live bool) (*Component, error) {
+	if err := p.NeedsPages("components"); err != nil {
+		return nil, err
+	}
 	name = strings.TrimSuffix(name, "_component")
 	if !identifier.MatchString(name) {
 		return nil, invalidName(name)

@@ -14,7 +14,9 @@ import (
 // project; templates/database adds and overrides files for a project with
 // a SQLite database, and templates/postgres overrides those again for
 // PostgreSQL. templates/full adds the files only a project with the admin,
-// telemetry and console has. A file is rendered with text/template, "__name__" in
+// telemetry and console has, and templates/api the files only a project
+// made with --api-only has. An API project leaves out every file for pages
+// (see uiOnly). A file is rendered with text/template, "__name__" in
 // a path is replaced by the project name, and a trailing ".tmpl" is dropped.
 //
 //go:embed all:templates
@@ -37,7 +39,9 @@ func (p *Project) Files() ([]File, error) {
 		// The Howdy release, such as "2.0.0", for its tag "v2.0.0".
 		"Release": p.Release,
 		// "true" unless --minimal: the admin, telemetry and console.
-		"Full": full(p.Minimal),
+		"Full": flag(!p.Minimal),
+		// "true" for --api-only: no Howdy UI, pages or static files.
+		"API": flag(p.API),
 		// The layout a layout template is rendered as; "default" here.
 		"Layout": "default",
 	}
@@ -51,6 +55,9 @@ func (p *Project) Files() ([]File, error) {
 	if !p.Minimal {
 		sets = append(sets, "templates/full")
 	}
+	if p.API {
+		sets = append(sets, "templates/api")
+	}
 	byPath := map[string]File{}
 	for _, set := range sets {
 		if err := render(set, data, byPath); err != nil {
@@ -59,6 +66,9 @@ func (p *Project) Files() ([]File, error) {
 	}
 	files := make([]File, 0, len(byPath))
 	for _, f := range byPath {
+		if p.API && uiOnly(f.Path, p.Name) {
+			continue
+		}
 		files = append(files, f)
 	}
 	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
@@ -83,11 +93,26 @@ func Layout(name, layout string) ([]byte, error) {
 	return out.Bytes(), err
 }
 
-func full(minimal bool) string {
-	if minimal {
-		return ""
+// flag is a template value that is true when it is not empty.
+func flag(on bool) string {
+	if on {
+		return "true"
 	}
-	return "true"
+	return ""
+}
+
+// uiOnly reports whether a project file serves pages, and so is left out of
+// an API project: the site and its tests, layouts, the HTML 404 page,
+// static files and the stylesheet task.
+func uiOnly(path, name string) bool {
+	for _, prefix := range []string{
+		"src/" + name + "/site/", "test/" + name + "/site/", "src/" + name + "/layouts/", "priv/",
+	} {
+		if strings.HasPrefix(path, prefix) {
+			return true
+		}
+	}
+	return path == "src/"+name+"/platform/not_found.gleam" || path == "src/tasks/css.gleam"
 }
 
 // render every template under root into byPath, replacing earlier entries

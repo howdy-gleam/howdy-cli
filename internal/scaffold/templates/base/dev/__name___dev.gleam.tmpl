@@ -1,5 +1,10 @@
+{{- if .API}}
+//// `gleam dev`: the same app with hot reload. Changes under `src/` rebuild
+//// it, and the next request uses the new code.
+{{- else}}
 //// `gleam dev`: the same app with hot reload. Changes under `src/` rebuild
 //// and refresh open pages; changes under `priv/public/` refresh them too.
+{{- end}}
 //// Restart after editing `dev/`, `gleam.toml` or `.env`.
 {{- if .Full}}
 ////
@@ -9,7 +14,9 @@
 {{- end}}
 
 import gleam/erlang/process
+{{- if not .API}}
 import howdy
+{{- end}}
 {{- if .Full}}
 import howdy/admin
 {{- end}}
@@ -19,7 +26,9 @@ import howdy/telemetry
 import howdy/telemetry/recorder
 {{- end}}
 import {{.Name}}
+{{- if not .API}}
 import {{.Name}}/site/site_controller as site
+{{- end}}
 
 pub fn main() -> Nil {
   {{.Name}}.load_environment()
@@ -41,12 +50,16 @@ pub fn main() -> Nil {
   let assert Ok(_) =
     dev.new(fn() {
       {{.Name}}.configured(services)
+{{- if not .API}}
       |> howdy.controller(site.stylesheet())
+{{- end}}
 {{- if .Full}}
       |> admin.mount(dashboard)
 {{- end}}
     })
+{{- if not .API}}
     |> dev.watch("priv/public")
+{{- end}}
     |> dev.run
   process.sleep_forever()
 }

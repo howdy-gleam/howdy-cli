@@ -585,6 +585,9 @@ func runCreateSlice(kind, plural, singular string, fields []string, layout strin
 	slice.Routes = kind == "controller" || kind == "pages+api"
 	slice.Pages = strings.HasPrefix(kind, "pages")
 	if slice.Pages {
+		if err := project.NeedsPages("pages"); err != nil {
+			return err
+		}
 		if slice.Layout, err = project.ResolveLayout(layout); err != nil {
 			return err
 		}

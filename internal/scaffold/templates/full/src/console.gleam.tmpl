@@ -6,7 +6,7 @@
 ////     gsh(2)> console.add_todo("Try the console")
 ////     gsh(3)> console.get("/api/todos")
 {{- else}}
-////     gsh(1)> console.get("/")
+////     gsh(1)> console.get("{{if .API}}/health{{else}}/{{end}}")
 {{- end}}
 ////
 //// The README shows how to open one on `gleam dev`. Add a function here for

@@ -1,0 +1,27 @@
+import gleam/dynamic/decode
+import gleam/http/response
+import gleam/string
+import howdy/testing
+import {{.Name}}/support
+
+fn get(path: String) {
+{{- if .Database}}
+  use db <- support.with_db()
+  testing.get(path) |> testing.send(support.app(db))
+{{- else}}
+  testing.get(path) |> testing.send(support.app())
+{{- end}}
+}
+
+pub fn health_check_test() {
+  let res = get("/health")
+  assert res.status == 200
+  assert testing.json(res, decode.at(["status"], decode.string)) == Ok("ok")
+}
+
+pub fn unknown_routes_get_json_test() {
+  let res = get("/no/such/route")
+  assert res.status == 404
+  let assert Ok(content_type) = response.get_header(res, "content-type")
+  assert string.starts_with(content_type, "application/json")
+}

@@ -1,18 +1,25 @@
 name = "{{.Name}}"
 version = "0.1.0"
 
-description = "A Howdy web application"
+description = "A Howdy {{if .API}}API server{{else}}web application{{end}}"
 target = "erlang"
 
 [dependencies]
 gleam_stdlib = ">= 1.0.0 and < 2.0.0"
 gleam_erlang = ">= 1.3.0 and < 2.0.0"
 gleam_http = ">= 4.4.0 and < 5.0.0"
+{{- if .API}}
+gleam_json = ">= 3.1.0 and < 4.0.0"
+{{- end}}
 logging = ">= 1.5.0 and < 2.0.0"
+{{- if not .API}}
 lustre = ">= 5.7.0 and < 6.0.0"
+{{- end}}
 dot_env = ">= 1.3.0 and < 2.0.0"
 howdy = { git = "https://github.com/mikeyjones/howdy.git", ref = "v{{.Release}}" }
+{{- if not .API}}
 howdy_ui = { git = "https://github.com/mikeyjones/howdy.git", ref = "v{{.Release}}", path = "ui" }
+{{- end}}
 {{- if .Full}}
 howdy_telemetry = { git = "https://github.com/mikeyjones/howdy.git", ref = "v{{.Release}}", path = "telemetry" }
 {{- end}}

@@ -1,9 +1,16 @@
 //// Signing in, with Howdy Auth. `main`, `dev/` and the tests build the
 //// app's `identity` and `permissions` here, and put them in its services.
 ////
+{{- if .API}}
+//// People sign in with a code emailed to their address, sent with the
+//// app's mailer, and register the same way, through the JSON API at
+//// `/api/auth`: POST /login or /register sends the code, and POST /session
+//// exchanges it for a session. Other ways in
+{{- else}}
 //// People sign in with a link or code emailed to their address, sent with
 //// the app's mailer, and register the same way. The pages are at `/auth`
-//// and the JSON API at `/api/auth`. Other ways in, such as passwords,
+//// and the JSON API at `/api/auth`. Other ways in
+{{- end}}, such as passwords,
 //// passkeys or Google, are added to `identity` below: see the auth docs.
 ////
 //// A controller that needs someone signed in takes the identity and guards
@@ -33,9 +40,13 @@ pub fn identity(db: Repo, mailer: mail.Mailer) -> auth.Auth {
       deliver: emails.deliver(auth_emails(mailer)),
     )
     as "auth could not start: has the database been migrated?"
+{{- if .API}}
+  // The emails carry a six-digit code, as well as the token to exchange.
+{{- else}}
   // The emails carry a link to the sign-in page and a six-digit code, as
   // well as the token to paste.
   let assert Ok(identity) = auth.with_email_links(identity, at: "/auth")
+{{- end}}
   identity
   |> auth.with_email_codes
   |> auth.allow_registration

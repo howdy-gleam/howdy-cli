@@ -42,6 +42,18 @@ Every project is also set up for development with the rest of Howdy:
 
 Pass `--minimal` to leave all three out.
 
+Pass `--api-only` for a JSON backend with no pages: the project leaves out
+Howdy UI and Lustre, the home page, layouts, static files, the stylesheet
+task and the HTML 404 page, and serves a health check at `GET /health`
+(`src/<project>/health/health_controller.gleam`) instead. A request no
+route matches gets Howdy's JSON 404 error through `howdy.not_found`. With a
+database it keeps the todos JSON API, and it combines with `--minimal` and
+`--database` as usual. In a project without `howdy_ui` in `gleam.toml` the
+`create` commands for pages, layouts and components are refused;
+`create controller`, `repo`, `migration` and `email` and every `add` work,
+and `howdy add auth` mounts only auth's JSON API, with emails that carry
+a code rather than a link to a page.
+
 Before writing anything it checks that `gleam` is installed (and warns if
 `erl` is missing), writes the files, formats them with `gleam format`,
 downloads dependencies,
@@ -351,7 +363,8 @@ internal/
 │       ├── base/      the page-only project, rendered with text/template
 │       ├── database/  files added or overridden when a database is included
 │       ├── postgres/  files overriding database/ for --database postgres
-│       └── full/      files only a project without --minimal has
+│       ├── full/      files only a project without --minimal has
+│       └── api/       files only a project with --api-only has
 ├── tools/      finding and running gleam / erl
 └── tui/        Bubble Tea step runner and styles
 ```
@@ -363,7 +376,11 @@ replaced by the project name and a trailing `.tmpl` is dropped. The
 by only a line or two between the databases stay in `database` and branch on
 `{{.Database}}` (`sqlite` or `postgres`) instead. The admin, telemetry and
 console are added to the shared files with `{{if .Full}}`, which is set
-unless `--minimal` is given; `full` only holds files no other set has. The
+unless `--minimal` is given; `full` only holds files no other set has.
+`--api-only` works the same way with `{{.API}}`, and its `api` set is
+rendered last; the files that only serve pages (the site, layouts,
+`priv/`, the stylesheet task and the HTML 404) are left out of an API
+project by `uiOnly` in `internal/scaffold/templates.go`. The
 published stylesheet `priv/public/assets/ui.css` is what `gleam run -m
 tasks/css` produces for the default themes; update it when Howdy UI's
 default styles change.

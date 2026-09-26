@@ -30,6 +30,9 @@ type Project struct {
 	// whose `database.returning` replaces the helper older projects carry
 	// in each context.
 	HowdyDatabase bool
+	// API reports a project made with 'howdy new --api-only': it has no
+	// howdy_ui, so no pages, layouts or components.
+	API bool
 }
 
 var (
@@ -62,7 +65,11 @@ func Open(dir string) (*Project, error) {
 	if m == nil {
 		return nil, errors.New("could not find the project name in gleam.toml")
 	}
-	p := &Project{Dir: dir, Name: string(m[1]), HowdyDatabase: dependency("howdy_database").Match(toml)}
+	p := &Project{
+		Dir: dir, Name: string(m[1]),
+		HowdyDatabase: dependency("howdy_database").Match(toml),
+		API:           !dependency("howdy_ui").Match(toml),
+	}
 	switch {
 	case !dependency("gloo").Match(toml):
 	case dependency("pog").Match(toml):
@@ -179,6 +186,15 @@ func NewSlice(p *Project, plural, singular string, fields []string) (*Slice, err
 	}
 	c.Singular, c.Type = singular, pascal(singular)
 	return c, nil
+}
+
+// NeedsPages refuses to write what, such as "pages", into an API project,
+// which has no Howdy UI or layouts to render it with.
+func (p *Project) NeedsPages(what string) error {
+	if !p.API {
+		return nil
+	}
+	return fmt.Errorf("this project is API only (made with --api-only, it has no howdy_ui in gleam.toml), so it has no %s; use 'howdy create controller' for a JSON API", what)
 }
 
 // projectFolder refuses a name whose folder under src/<project>/ holds the

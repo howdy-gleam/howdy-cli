@@ -1,0 +1,253 @@
+# {{.Title}}
+
+A JSON API server built with **Gleam and Howdy**{{if eq .Database "sqlite"}}, with **Gloo and SQLite**{{else if eq .Database "postgres"}}, with **Gloo and PostgreSQL**{{end}},
+created by `howdy new --api-only`. It has no pages, layouts or static files:
+{{- if .Database}}
+it serves a todos API backed by the database, and a health check.
+{{- else}}
+it serves a health check, ready for your own controllers.
+{{- end}}
+Unknown routes and errors answer with Howdy's JSON errors. Development has
+hot reload, and the tests send requests straight through the app.
+{{- if .Full}}
+
+Under `gleam dev` the Howdy admin shows {{if .Database}}the database and {{end}}a trace
+of every request, and a console runs Gleam inside the server.
+{{- end}}
+
+## Requirements
+
+- Gleam 1.18+ and Erlang/OTP{{if .Database}}, and rebar3{{end}}
+{{- if eq .Database "sqlite"}}
+- A C build toolchain, for SQLite's native driver
+{{- else if eq .Database "postgres"}}
+- Docker with Compose, to run PostgreSQL locally, or a PostgreSQL server of
+  your own
+{{- end}}
+- Git to download Howdy and the development-only {{if .Full}}hot reload, admin
+  and console packages{{else}}hot reload package{{end}} from GitHub at the Howdy
+  {{.Release}} release, tag `v{{.Release}}`, as configured in `gleam.toml`.
+
+## Start the dev server
+
+```sh
+gleam deps download
+{{- if eq .Database "postgres"}}
+docker compose up -d
+{{- end}}
+gleam dev
+```
+
+Then try it:
+
+```sh
+curl http://127.0.0.1:8787/health
+{{- if .Database}}
+curl http://127.0.0.1:8787/api/todos
+{{- end}}
+```
+{{- if eq .Database "sqlite"}}
+
+Startup applies pending migrations to `{{.Name}}.sqlite3` (ignored by Git).
+{{- else if eq .Database "postgres"}}
+
+`docker-compose.yml` starts PostgreSQL 17 on `127.0.0.1:5432` (user and
+password `postgres`) with two databases: `{{.Name}}_dev` for the app and
+`{{.Name}}_test` for the tests. Data lives in a Docker volume;
+`docker compose down` stops the server and `docker compose down -v` also
+deletes the data. Startup waits a few seconds for the server and applies
+pending migrations.
+{{- end}}
+Changes under `src/` rebuild the app, and the next request uses the new
+code. Restart after editing `dev/`, `gleam.toml` or `.env`.
+{{- if .Full}}
+
+### The admin
+
+**http://127.0.0.1:8787/_howdy** is the Howdy admin, mounted by
+`dev/{{.Name}}_dev.gleam`:
+{{- if .Database}}
+
+- **Tables** lists every table. Search, filter, sort, and insert, edit or
+  delete rows.
+{{- end}}
+- **Telemetry** shows every request as a timeline of its spans{{if .Database}}, with the SQL
+  of each query{{end}} and the log lines it wrote, and points out failures.
+
+The admin has no login, so it only exists under `gleam dev`, answers only on
+localhost, and never ships: it is a dev dependency, and `gleam run` and
+`gleam export erlang-shipment` leave `dev/` out.
+
+### The console
+
+The console is [GSH](https://hexdocs.pm/gsh/), a Gleam REPL, running inside
+the dev server, so what you type uses the same processes as the server.
+Shortcuts live in `src/console.gleam`, which every session imports.
+
+Start the dev server inside a console, in one terminal:
+
+```sh
+gleam run -m gsh -- {{.Name}}_dev
+```
+
+The server, hot reload and the admin all run as usual, with a prompt:
+
+```text
+{{- if .Database}}
+gsh(1)> console.todos()
+gsh(2)> console.add_todo("Try the console")
+gsh(3)> console.get("/api/todos")
+{{- else}}
+gsh(1)> console.get("/health")
+{{- end}}
+```
+
+To attach to a dev server that is already running, start it as a named
+Erlang node, then attach from a second terminal:
+
+```sh
+# Terminal 1
+ERL_EPMD_ADDRESS=127.0.0.1 \
+ERL_FLAGS="-sname {{.Name}}@localhost -setcookie dev -kernel inet_dist_use_interface {127,0,0,1}" \
+gleam dev
+
+# Terminal 2
+ERL_FLAGS="-kernel inet_dist_use_interface {127,0,0,1}" \
+gleam run -m gsh -- --remsh {{.Name}}@localhost --cookie dev
+```
+
+GSH says `Connected to remote node`. The flags keep the node on 127.0.0.1:
+anyone who can connect to it can run any code in your app, so never expose
+it beyond your machine.
+
+### Without hot reload
+{{- end}}
+
+`gleam run` starts the server without the reload watcher.
+{{- if .Database}} It also migrates
+at startup; for production you may prefer to run `gleam run -m tasks/migrate`
+separately and remove that line from `main`.
+{{- end}}
+
+## Configuration
+
+Configuration is read from the environment, with `.env` in the working
+directory loaded first. Copy `.env.example` to `.env` to change it.
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `PORT` | `8787` | Listening port on 127.0.0.1 |
+{{- if eq .Database "sqlite"}}
+| `DATABASE_PATH` | `{{.Name}}.sqlite3` | SQLite file; parent directory must exist |
+{{- else if eq .Database "postgres"}}
+| `DATABASE_URL` | `postgres://postgres:postgres@127.0.0.1:5432/{{.Name}}_dev` | The app's database |
+| `TEST_DATABASE_URL` | `postgres://postgres:postgres@127.0.0.1:5432/{{.Name}}_test` | The tests' database |
+{{- end}}
+| `DOT_ENV_PATH` | `.env` | Which file to load, set in the shell |
+{{- if .Full}}
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | unset | `gleam run` sends traces to this OpenTelemetry collector, such as `http://localhost:4318` |
+{{- end}}
+
+## Routes
+
+| Method | Route | Result |
+| --- | --- | --- |
+| GET | `/health` | `{"status": "ok"}` while the server is up |
+{{- if .Database}}
+| GET | `/api/todos` | All todos, oldest first |
+| GET | `/api/todos/:id` | One todo |
+| POST | `/api/todos` | Create `{"title": "..."}`; 201 |
+| PATCH | `/api/todos/:id` | Set `{"done": true}`; 200 |
+| DELETE | `/api/todos/:id` | 204 |
+{{- end}}
+
+{{if .Database}}Validation failures return 422 with field errors; unknown ids return 404.
+{{end}}Any other route returns a 404 with Howdy's JSON error, `{"error": "..."}`.
+
+## Test
+
+```sh
+gleam test
+```
+
+{{if eq .Database "postgres"}}PostgreSQL must be running. {{end}}Tests use `howdy/testing` to send requests straight to the app, without a
+socket.
+{{- if eq .Database "sqlite"}} `test/{{.Name}}/support.gleam` gives each test a migrated
+in-memory database.
+{{- else if eq .Database "postgres"}} `test/{{.Name}}/support.gleam` gives each test the migrated
+`{{.Name}}_test` database with every table emptied, so never point
+`TEST_DATABASE_URL` at data you want to keep.
+{{- end}}
+
+## Layout
+
+```text
+src/
+├── {{.Name}}.gleam            # composition root: {{if .Database}}database, {{end}}controllers, listener
+{{- if .Full}}
+├── console.gleam             # console shortcuts
+{{- end}}
+{{- if .Database}}
+├── {{.Name}}/
+│   ├── health/
+│   │   └── health_controller.gleam  # GET /health
+│   ├── todos/
+│   │   ├── todo_item.gleam    # record, validation, JSON codecs, Gloo table
+│   │   ├── todos.gleam        # context: every database operation on todos
+│   │   └── todo_controller.gleam  # JSON API
+│   ├── migrations/
+│   │   └── create_todos.gleam # version 1
+│   └── platform/
+│       ├── database.gleam     # {{if eq .Database "postgres"}}pog connection pool{{else}}connection settings{{end}} and migration list
+│       └── errors.gleam       # database -> application errors
+└── tasks/
+    └── migrate.gleam          # applies migrations without starting the server
+{{- else}}
+└── {{.Name}}/
+    └── health/
+        └── health_controller.gleam  # GET /health
+{{- end}}
+dev/
+└── {{.Name}}_dev.gleam        # `gleam dev` entry point with hot reload{{if .Full}}, admin and telemetry{{end}}
+test/
+{{- if eq .Database "postgres"}}
+docker-compose.yml             # PostgreSQL for development and tests
+docker/postgres/init.sql       # creates the test database on first start
+{{- end}}
+```
+
+Group new features by folder under `src/{{.Name}}/`, each with its own
+controller, and register the controller in `src/{{.Name}}.gleam`.
+{{- if .Database}}
+`howdy create controller <plural> <singular> name:type ...` writes a
+feature with its record, database operations, JSON controller, migration
+and tests. To change the schema, add a new migration file with the next
+version and list it in `platform/database.gleam`; never edit a migration
+that has already been applied.
+{{- end}}
+
+## Email
+
+`howdy add mail` adds Howdy Mail. The app's services in
+`src/{{.Name}}.gleam` get a mailer, so controllers send with
+`services.mailer`: through the provider the environment names under
+`gleam run`, and into an outbox under `gleam dev`{{if .Full}}, which the admin shows
+under Mail with a preview of every email{{end}}. `howdy create email <name>` adds
+another email.
+{{- if .Database}}
+
+## Sign-in
+
+`howdy add auth` adds Howdy Auth's JSON API at `/api/auth`: sign-in and
+registration by a code emailed to the address, and roles. The app's
+services get `identity` and `permissions`; guard a controller with
+`controller.guarded("/account", auth.required(services.identity))`.
+{{- end}}
+
+## Upgrading Howdy
+
+This project uses Howdy {{.Release}}: every Howdy package in `gleam.toml`
+comes from the release tag `v{{.Release}}`, so they always match. To move
+to a newer release, change `ref = "v{{.Release}}"` to the new tag on every
+one of them, run `gleam deps download`, and check the release's notes for
+anything you need to change.

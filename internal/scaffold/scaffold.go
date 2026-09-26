@@ -27,6 +27,10 @@ type Project struct {
 	// Minimal leaves out the development admin, telemetry and the GSH
 	// console, which every project gets otherwise.
 	Minimal bool
+	// API leaves out Howdy UI, Lustre, the pages, layouts and static files:
+	// the project is a JSON backend, with a health check in place of the
+	// home page.
+	API bool
 
 	arg string
 }

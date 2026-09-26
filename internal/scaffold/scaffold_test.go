@@ -341,3 +341,73 @@ func TestMinimalProject(t *testing.T) {
 		}
 	}
 }
+
+// An --api-only project is a JSON backend: no Howdy UI, Lustre, pages,
+// layouts or static files, and a health check in place of the home page.
+func TestAPIProject(t *testing.T) {
+	for _, minimal := range []bool{false, true} {
+		for _, db := range []Database{NoDatabase, SQLite, Postgres} {
+			label := db.Label()
+			if minimal {
+				label += ", minimal"
+			}
+			p, err := New(filepath.Join(t.TempDir(), "demo_site"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			p.Database, p.Minimal, p.API = db, minimal, true
+			files, err := p.Files()
+			if err != nil {
+				t.Fatal(err)
+			}
+			byPath := map[string]string{}
+			for _, f := range files {
+				content := string(f.Content)
+				byPath[f.Path] = content
+				if strings.Contains(content, "{{") {
+					t.Errorf("unrendered template markers in %s (%s)", f.Path, label)
+				}
+				for _, prefix := range []string{"priv/", "src/demo_site/site/", "src/demo_site/layouts/", "test/demo_site/site/"} {
+					if strings.HasPrefix(f.Path, prefix) {
+						t.Errorf("an API project (%s) should not have %s", label, f.Path)
+					}
+				}
+				for _, word := range []string{"howdy_ui", "howdy/ui", "lustre", "static.serve", "platform/not_found", "not_found_page", "site_controller", "priv/public", "tasks/css", "_layout"} {
+					if strings.Contains(content, word) {
+						t.Errorf("%s in an API project (%s) mentions %q", f.Path, label, word)
+					}
+				}
+			}
+			for _, gone := range []string{"src/tasks/css.gleam", "src/demo_site/platform/not_found.gleam"} {
+				if _, ok := byPath[gone]; ok {
+					t.Errorf("an API project (%s) should not have %s", label, gone)
+				}
+			}
+			for path, wants := range map[string][]string{
+				"gleam.toml":          {`description = "A Howdy API server`, `gleam_json = ">= 3.1.0 and < 4.0.0"`},
+				"src/demo_site.gleam": {"|> howdy.controller(health.controller())", "import demo_site/health/health_controller as health", "|> howdy.not_found(fn(ctx) {", `service.NotFound("Not found")`},
+				"src/demo_site/health/health_controller.gleam":       {`controller.new("health")`},
+				"test/demo_site/health/health_controller_test.gleam": {`get("/health")`},
+				"README.md":               {"howdy new --api-only", "curl http://127.0.0.1:8787/health"},
+				"dev/demo_site_dev.gleam": {"dev.new(fn() {"},
+			} {
+				for _, want := range wants {
+					if !strings.Contains(byPath[path], want) {
+						t.Errorf("%s (%s) should contain %q:\n%s", path, label, want, byPath[path])
+					}
+				}
+			}
+			if db != NoDatabase {
+				for path, want := range map[string]string{
+					"src/demo_site.gleam":             "|> howdy.controller(todos.controller(db))",
+					"src/demo_site/todos/todos.gleam": "pub fn all(",
+					"README.md":                       "`/api/todos`",
+				} {
+					if !strings.Contains(byPath[path], want) {
+						t.Errorf("%s (%s) should contain %q", path, label, want)
+					}
+				}
+			}
+		}
+	}
+}

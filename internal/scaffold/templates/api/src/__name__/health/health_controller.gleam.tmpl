@@ -1,0 +1,16 @@
+//// A health check for load balancers, container orchestrators and uptime
+//// monitors: a 200 with `{"status":"ok"}` while the server is up. Try it:
+////
+//// ```sh
+//// curl http://127.0.0.1:8787/health
+//// ```
+
+import gleam/json
+import howdy/controller
+
+pub fn controller() {
+  controller.new("health")
+  |> controller.get("/", fn(ctx) {
+    controller.json(ctx, json.object([#("status", json.string("ok"))]))
+  })
+}

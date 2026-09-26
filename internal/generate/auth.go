@@ -148,11 +148,16 @@ func (a *Auth) Register() (notes []string) {
 		if !howdyNew.MatchString(text) {
 			return "", errors.New("no howdy.new() in app")
 		}
-		// The routes go first, ahead of the static catch-all.
-		text = howdyNew.ReplaceAllString(text, "${0}${1}|> howdy.controller(routes.api(services.identity, at: \"/api/auth\"))\n"+
-			"${1}|> howdy.controller(pages.routes(services.identity, at: \"/auth\", api_at: \"/api/auth\"))\n")
-		return addImports(text, "import howdy/auth", "import howdy/auth/pages", "import howdy/auth/routes",
-			"import howdy/authorization as access", accounts), nil
+		// The routes go first, ahead of the static catch-all. An API
+		// project gets the JSON API without the pages.
+		routes := "${0}${1}|> howdy.controller(routes.api(services.identity, at: \"/api/auth\"))\n"
+		imports := []string{"import howdy/auth", "import howdy/auth/routes", "import howdy/authorization as access", accounts}
+		if !p.API {
+			routes += "${1}|> howdy.controller(pages.routes(services.identity, at: \"/auth\", api_at: \"/api/auth\"))\n"
+			imports = append(imports, "import howdy/auth/pages")
+		}
+		text = howdyNew.ReplaceAllString(text, routes)
+		return addImports(text, imports...), nil
 	})
 	if err != nil {
 		notes = append(notes, fmt.Sprintf("Add auth to the app in %s: identity: auth.Auth and permissions: access.Authorization in Services, built in main with accounts.identity(db, mailer) and accounts.permissions(db), and in app |> howdy.controller(routes.api(services.identity, at: \"/api/auth\")) and |> howdy.controller(pages.routes(services.identity, at: \"/auth\", api_at: \"/api/auth\")).", root))

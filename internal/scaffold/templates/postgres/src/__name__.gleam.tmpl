@@ -13,14 +13,23 @@ import howdy
 import howdy/console
 {{- end}}
 import howdy/logger
+{{- if .API}}
+import howdy/service
+{{- else}}
 import howdy/static
+{{- end}}
 {{- if .Full}}
 import howdy/telemetry
 {{- end}}
 import logging
+{{- if .API}}
+import {{.Name}}/health/health_controller as health
+{{- end}}
 import {{.Name}}/platform/database
+{{- if not .API}}
 import {{.Name}}/platform/not_found
 import {{.Name}}/site/site_controller as site
+{{- end}}
 import {{.Name}}/todos/todo_controller as todos
 
 /// Everything the app is built from, made once at startup: by `main`, by
@@ -36,11 +45,19 @@ pub fn app(services: Services) -> howdy.App {
   let db = services.db
   howdy.new()
   |> howdy.controller(todos.controller(db))
+{{- if .API}}
+  |> howdy.controller(health.controller())
+  // A request no route matches gets the same JSON error as a controller's.
+  |> howdy.not_found(fn(ctx) {
+    service.error_response(ctx, service.NotFound("Not found"))
+  })
+{{- else}}
   |> howdy.controller(site.controller(db))
   // The root static controller is a catch-all, so mount it last.
   |> howdy.controller(static.serve("/", from: "priv/public"))
   // People get the 404 page, API clients JSON: see platform/not_found.gleam.
   |> howdy.middleware(not_found.middleware)
+{{- end}}
 }
 
 /// Configure logging and load `.env` from the working directory. Call once

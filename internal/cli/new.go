@@ -19,6 +19,7 @@ type newOptions struct {
 	database   string
 	release    string
 	minimal    bool
+	apiOnly    bool
 	skipDeps   bool
 	plain      bool
 }
@@ -44,6 +45,11 @@ Gleam REPL (GSH) attached to the running server, with shortcuts in
 src/console.gleam. Pass --minimal to leave out the admin, telemetry and the
 console.
 
+Pass --api-only for a JSON backend with no pages: it leaves out Howdy UI,
+Lustre, the home page, layouts, static files and the HTML 404 page, and
+serves a health check at /health instead. With a database it keeps the
+todos JSON API.
+
 Howdy packages are downloaded from GitHub at a release tag, so they always
 match. By default that is Howdy ` + scaffold.Release + `, the release these
 templates are written for; pass --howdy to choose another.
@@ -51,7 +57,7 @@ templates are written for; pass --howdy to choose another.
 The name must be a valid Gleam project name: lowercase letters, digits and
 underscores, starting with a letter. A path such as apps/my_site also works;
 the last segment is the project name.`,
-		Example: "  howdy new my_site\n  howdy new my_site --database postgres\n  howdy new my_site --no-database\n  howdy new my_site --minimal\n  howdy new my_site --howdy 2.1.0\n  howdy new apps/my_site",
+		Example: "  howdy new my_site\n  howdy new my_site --database postgres\n  howdy new my_site --no-database\n  howdy new my_site --minimal\n  howdy new my_api --api-only\n  howdy new my_site --howdy 2.1.0\n  howdy new apps/my_site",
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if opts.noDatabase && cmd.Flags().Changed("database") {
@@ -64,6 +70,7 @@ the last segment is the project name.`,
 	cmd.Flags().StringVar(&opts.database, "database", string(scaffold.SQLite), "database to use: sqlite or postgres")
 	cmd.Flags().StringVar(&opts.release, "howdy", scaffold.Release, "Howdy release to depend on, such as "+scaffold.Release)
 	cmd.Flags().BoolVar(&opts.minimal, "minimal", false, "leave out the admin, telemetry and the console")
+	cmd.Flags().BoolVar(&opts.apiOnly, "api-only", false, "a JSON backend only: leave out Howdy UI, pages, layouts and static files")
 	cmd.Flags().BoolVar(&opts.skipDeps, "skip-deps", false, "do not run 'gleam deps download' after creating the files")
 	cmd.Flags().BoolVar(&opts.plain, "plain", false, "print progress as plain lines instead of animating")
 	return cmd
@@ -88,6 +95,7 @@ func runNew(arg string, opts newOptions) error {
 	project.Database = database
 	project.Release = release
 	project.Minimal = opts.minimal
+	project.API = opts.apiOnly
 
 	var gleam tools.Tool
 	steps := []tui.Step{
@@ -117,7 +125,12 @@ func runNew(arg string, opts newOptions) error {
 					return "", err
 				}
 				kind := fmt.Sprintf("with a %s todo list", project.Database.Label())
-				if project.Database == scaffold.NoDatabase {
+				switch {
+				case project.API && project.Database == scaffold.NoDatabase:
+					kind = "API only"
+				case project.API:
+					kind = fmt.Sprintf("API only, with a %s todos API", project.Database.Label())
+				case project.Database == scaffold.NoDatabase:
 					kind = "page only"
 				}
 				if !project.Minimal {
@@ -179,7 +192,11 @@ func nextSteps(project *scaffold.Project) []tui.Command {
 	if project.Database == scaffold.Postgres {
 		commands = append(commands, tui.Command{Cmd: "docker compose up -d", Note: "start PostgreSQL, needed by the app and the tests"})
 	}
-	commands = append(commands, tui.Command{Cmd: "gleam dev", Note: "start with hot reload, then open http://127.0.0.1:8787"})
+	if project.API {
+		commands = append(commands, tui.Command{Cmd: "gleam dev", Note: "start with hot reload, then curl http://127.0.0.1:8787/health"})
+	} else {
+		commands = append(commands, tui.Command{Cmd: "gleam dev", Note: "start with hot reload, then open http://127.0.0.1:8787"})
+	}
 	if !project.Minimal {
 		commands = append(commands, tui.Command{Cmd: "gleam run -m gsh -- " + project.Name + "_dev", Note: "or start it inside a console"})
 	}
@@ -190,6 +207,9 @@ func nextSteps(project *scaffold.Project) []tui.Command {
 	if project.Database != scaffold.NoDatabase {
 		commands = append(commands, tui.Command{Cmd: "gleam run -m tasks/migrate", Note: "apply migrations without starting the server"})
 	}
+	if project.API {
+		return commands
+	}
 	return append(commands, tui.Command{Cmd: "gleam run -m tasks/css", Note: "regenerate priv/public/assets/ui.css after changing themes"})
 }
 
@@ -197,6 +217,12 @@ func notes(project *scaffold.Project) []string {
 	n := project.Name
 	notes := []string{
 		fmt.Sprintf("The home page lives in src/%s/site/site_controller.gleam. Static files go in priv/public.", n),
+	}
+	if project.API {
+		notes = []string{
+			fmt.Sprintf("The health check lives in src/%s/health/health_controller.gleam. Add controllers beside it and", n),
+			fmt.Sprintf("register them in src/%s.gleam; unknown routes answer with Howdy's JSON 404.", n),
+		}
 	}
 	if !project.Minimal {
 		notes = append(notes,
@@ -209,6 +235,10 @@ func notes(project *scaffold.Project) []string {
 			fmt.Sprintf("Todos live in src/%s/todos/ (record, database operations, JSON API at /api/todos)", n),
 			fmt.Sprintf("and the live list in src/%s/site/todo_list.gleam. Migrations are in src/%s/migrations/.", n, n),
 		)
+		if project.API {
+			notes[len(notes)-1] = fmt.Sprintf("Migrations are in src/%s/migrations/.", n)
+			notes[len(notes)-2] = fmt.Sprintf("Todos live in src/%s/todos/ (record, database operations, JSON API at /api/todos).", n)
+		}
 	}
 	env := "Copy .env.example to .env to change the port."
 	switch project.Database {

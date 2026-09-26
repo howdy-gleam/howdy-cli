@@ -35,6 +35,9 @@ type Page struct {
 // NewPage validates the names and checks that the controller does not
 // already have the page. layout is a --layout value, empty for the default.
 func NewPage(p *Project, controller, name string, live bool, layout string) (*Page, error) {
+	if err := p.NeedsPages("pages"); err != nil {
+		return nil, err
+	}
 	name = strings.TrimSuffix(name, "_page")
 	for _, n := range []string{controller, name} {
 		if !identifier.MatchString(n) {

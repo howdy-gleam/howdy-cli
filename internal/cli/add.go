@@ -172,6 +172,9 @@ app's identity and permissions:
   pages         /auth/login, /auth/register and /auth/account
   JSON API      /api/auth
 
+A project made with --api-only gets the JSON API without the pages, and
+emails carry the code without a link.
+
 The app's services get identity and permissions, built in main, the dev
 server and the test support, and platform/database.gleam runs auth's
 migrations after the app's own. With the dev admin, /_howdy gets users,
@@ -286,6 +289,9 @@ func runAddAuth(plain, skipDeps bool) error {
 	)
 	commands := []tui.Command{
 		{Cmd: "gleam dev", Note: "then register at http://127.0.0.1:8787/auth/register"},
+	}
+	if project.API {
+		commands[0].Note = "then POST {\"email\": ...} to http://127.0.0.1:8787/api/auth/register"
 	}
 	commands = append(commands,
 		tui.Command{Cmd: "gleam test", Note: "run the tests, including auth's"},

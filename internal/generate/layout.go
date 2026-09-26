@@ -69,6 +69,9 @@ type Layout struct {
 
 // NewLayout validates the name and checks that the layout does not exist.
 func NewLayout(p *Project, name string) (*Layout, error) {
+	if err := p.NeedsPages("layouts"); err != nil {
+		return nil, err
+	}
 	name = strings.TrimSuffix(name, "_layout")
 	if !identifier.MatchString(name) {
 		return nil, invalidName(name)
