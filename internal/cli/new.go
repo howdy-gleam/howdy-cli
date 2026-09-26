@@ -21,7 +21,7 @@ type newOptions struct {
 	minimal    bool
 	apiOnly    bool
 	skipDeps   bool
-	plain      bool
+	out        output
 }
 
 func newCommand() *cobra.Command {
@@ -45,6 +45,10 @@ Gleam REPL (GSH) attached to the running server, with shortcuts in
 src/console.gleam. Pass --minimal to leave out the admin, telemetry and the
 console.
 
+AGENTS.md tells coding agents how to work on the project: how to check a
+change, which howdy commands write code for them, and where things go.
+CLAUDE.md imports it for Claude Code.
+
 Pass --api-only for a JSON backend with no pages: it leaves out Howdy UI,
 Lustre, the home page, layouts, static files and the HTML 404 page, and
 serves a health check at /health instead. With a database it keeps the
@@ -59,13 +63,13 @@ underscores, starting with a letter. It cannot be the name of a module that
 ships with Erlang, such as pg, auth or timer, which the project's own module
 would replace. A path such as apps/my_site also works; the last segment is the
 project name.`,
-		Example: "  howdy new my_site\n  howdy new my_site --database postgres\n  howdy new my_site --no-database\n  howdy new my_site --minimal\n  howdy new my_api --api-only\n  howdy new my_site --howdy 2.1.0\n  howdy new apps/my_site",
+		Example: "  howdy new my_site\n  howdy new my_site --database postgres\n  howdy new my_site --no-database\n  howdy new my_site --minimal\n  howdy new my_api --api-only\n  howdy new my_site --howdy 2.1.0\n  howdy new apps/my_site\n  howdy new my_site --dry-run --json",
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if opts.noDatabase && cmd.Flags().Changed("database") {
 				return errors.New("--database and --no-database cannot be used together")
 			}
-			return runNew(args[0], opts)
+			return runNew(args[0], &opts)
 		},
 	}
 	cmd.Flags().BoolVar(&opts.noDatabase, "no-database", false, "leave out the database, Gloo and the todo list example")
@@ -74,11 +78,11 @@ project name.`,
 	cmd.Flags().BoolVar(&opts.minimal, "minimal", false, "leave out the admin, telemetry and the console")
 	cmd.Flags().BoolVar(&opts.apiOnly, "api-only", false, "a JSON backend only: leave out Howdy UI, pages, layouts and static files")
 	cmd.Flags().BoolVar(&opts.skipDeps, "skip-deps", false, "do not run 'gleam deps download' after creating the files")
-	cmd.Flags().BoolVar(&opts.plain, "plain", false, "print progress as plain lines instead of animating")
+	opts.out.flags(cmd, true)
 	return cmd
 }
 
-func runNew(arg string, opts newOptions) error {
+func runNew(arg string, opts *newOptions) error {
 	database, err := scaffold.ParseDatabase(opts.database)
 	if err != nil {
 		return err
@@ -98,6 +102,18 @@ func runNew(arg string, opts newOptions) error {
 	project.Release = release
 	project.Minimal = opts.minimal
 	project.API = opts.apiOnly
+	files, err := project.Files()
+	if err != nil {
+		return err
+	}
+	created := make([]string, len(files))
+	for i, f := range files {
+		created[i] = f.Path
+	}
+	command := "howdy new " + project.Name
+	if opts.out.dryRun {
+		return opts.out.report(command, project.Name, created, nil, nil, nil, nil)
+	}
 
 	var gleam tools.Tool
 	steps := []tui.Step{
@@ -121,7 +137,9 @@ func runNew(arg string, opts newOptions) error {
 				count, err := project.Write(func(path string) {
 					r.Log(path)
 					r.Detail(path)
-					time.Sleep(45 * time.Millisecond)
+					if !opts.out.json {
+						time.Sleep(45 * time.Millisecond)
+					}
 				})
 				if err != nil {
 					return "", err
@@ -149,12 +167,7 @@ func runNew(arg string, opts newOptions) error {
 		},
 		{
 			Title: "Downloading dependencies",
-			Skip: func() (string, bool) {
-				if opts.skipDeps {
-					return "skipped (--skip-deps)", true
-				}
-				return "", false
-			},
+			Skip:  opts.out.skipDeps(opts.skipDeps),
 			Run: func(r tui.Reporter) (string, error) {
 				r.Detail("gleam deps download")
 				if err := gleam.Run(project.Dir, "deps", "download"); err != nil {
@@ -166,7 +179,7 @@ func runNew(arg string, opts newOptions) error {
 		},
 	}
 
-	err = tui.Run(fmt.Sprintf("howdy new %s", project.Name), steps, opts.plain)
+	err = opts.out.run(command, steps)
 	if err != nil {
 		if !errors.Is(err, tui.ErrCancelled) {
 			// Leave nothing half-made behind.
@@ -175,8 +188,7 @@ func runNew(arg string, opts newOptions) error {
 		return err
 	}
 
-	fmt.Print(tui.NextSteps(project.Name, nextSteps(project), notes(project)))
-	return nil
+	return opts.out.report(command, project.Name, created, nil, nextSteps(project), notes(project), nil)
 }
 
 func nextSteps(project *scaffold.Project) []tui.Command {

@@ -26,7 +26,8 @@ func addCommand() *cobra.Command {
 }
 
 func addFlagsCommand() *cobra.Command {
-	var plain, skipDeps bool
+	var skipDeps bool
+	out := &output{}
 	cmd := &cobra.Command{
 		Use:   "flags",
 		Short: "Add feature flags with Howdy Flags, kept in the app's database and managed in the dev admin",
@@ -50,16 +51,17 @@ flags.enabled(services.features, feature_flags.early_access(), for: flags.user(i
 		Example: "  howdy add flags",
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runAddFlags(plain, skipDeps)
+			return runAddFlags(out, skipDeps)
 		},
 	}
 	cmd.Flags().BoolVar(&skipDeps, "skip-deps", false, "do not run 'gleam deps download' after changing gleam.toml")
-	cmd.Flags().BoolVar(&plain, "plain", false, "print progress as plain lines instead of animating")
+	out.flags(cmd, true)
 	return cmd
 }
 
-func runAddFlags(plain, skipDeps bool) error {
-	dir, err := findProjectDir()
+func runAddFlags(out *output, skipDeps bool) error {
+	defer out.cleanup()
+	dir, err := out.projectDir()
 	if err != nil {
 		return err
 	}
@@ -73,7 +75,7 @@ func runAddFlags(plain, skipDeps bool) error {
 	}
 
 	var gleam tools.Tool
-	var notes []string
+	var manual []string
 	steps := []tui.Step{
 		{
 			Title: "Checking for Gleam",
@@ -99,8 +101,8 @@ func runAddFlags(plain, skipDeps bool) error {
 		{
 			Title: "Wiring up the flags",
 			Run: func(r tui.Reporter) (string, error) {
-				notes = f.Register()
-				if len(notes) > 0 {
+				manual = f.Register()
+				if len(manual) > 0 {
 					return "needs a hand, see below", nil
 				}
 				if f.Admin {
@@ -109,6 +111,7 @@ func runAddFlags(plain, skipDeps bool) error {
 				return "services, migrations, tests", nil
 			},
 		},
+		noteForAgents(project, "flags"),
 		{
 			Title: "Formatting Gleam sources",
 			Run: func(r tui.Reporter) (string, error) {
@@ -117,12 +120,7 @@ func runAddFlags(plain, skipDeps bool) error {
 		},
 		{
 			Title: "Downloading dependencies",
-			Skip: func() (string, bool) {
-				if skipDeps {
-					return "skipped (--skip-deps)", true
-				}
-				return "", false
-			},
+			Skip:  out.skipDeps(skipDeps),
 			Run: func(r tui.Reporter) (string, error) {
 				r.Detail("gleam deps download")
 				if err := gleam.Run(dir, "deps", "download"); err != nil {
@@ -133,13 +131,11 @@ func runAddFlags(plain, skipDeps bool) error {
 			},
 		},
 	}
-	if err := tui.Run("howdy add flags", steps, plain); err != nil {
+	if err := out.run("howdy add flags", steps); err != nil {
 		return err
 	}
 
-	for i, note := range notes {
-		notes[i] = "Needs a hand: " + note
-	}
+	var notes []string
 	if f.Admin {
 		notes = append(notes, "The admin at /_howdy manages the flags under Flags: kill switches, rules, groups and history.")
 	}
@@ -155,12 +151,12 @@ func runAddFlags(plain, skipDeps bool) error {
 	if f.Admin {
 		commands = append([]tui.Command{{Cmd: "gleam dev", Note: "then open http://127.0.0.1:8787/_howdy/flags"}}, commands...)
 	}
-	fmt.Print(tui.NextSteps("flags", commands, notes))
-	return nil
+	return out.done("howdy add flags", "flags", commands, notes, manual)
 }
 
 func addRemoteCommand() *cobra.Command {
-	var plain, skipDeps bool
+	var skipDeps bool
+	out := &output{}
 	cmd := &cobra.Command{
 		Use:   "remote",
 		Short: "Add typed calls between services with Howdy Remote, over Erlang distribution or HTTP",
@@ -185,16 +181,17 @@ remote.call(target, procedure, input, timeout: 5000).`,
 		Example: "  howdy add remote",
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runAddRemote(plain, skipDeps)
+			return runAddRemote(out, skipDeps)
 		},
 	}
 	cmd.Flags().BoolVar(&skipDeps, "skip-deps", false, "do not run 'gleam deps download' after changing gleam.toml")
-	cmd.Flags().BoolVar(&plain, "plain", false, "print progress as plain lines instead of animating")
+	out.flags(cmd, true)
 	return cmd
 }
 
-func runAddRemote(plain, skipDeps bool) error {
-	dir, err := findProjectDir()
+func runAddRemote(out *output, skipDeps bool) error {
+	defer out.cleanup()
+	dir, err := out.projectDir()
 	if err != nil {
 		return err
 	}
@@ -208,7 +205,7 @@ func runAddRemote(plain, skipDeps bool) error {
 	}
 
 	var gleam tools.Tool
-	var notes []string
+	var manual []string
 	steps := []tui.Step{
 		{
 			Title: "Checking for Gleam",
@@ -234,13 +231,14 @@ func runAddRemote(plain, skipDeps bool) error {
 		{
 			Title: "Wiring up the procedure server",
 			Run: func(r tui.Reporter) (string, error) {
-				notes = rm.Register()
-				if len(notes) > 0 {
+				manual = rm.Register()
+				if len(manual) > 0 {
 					return "needs a hand, see below", nil
 				}
 				return "services, /rpc, cluster, tests", nil
 			},
 		},
+		noteForAgents(project, "remote"),
 		{
 			Title: "Formatting Gleam sources",
 			Run: func(r tui.Reporter) (string, error) {
@@ -249,12 +247,7 @@ func runAddRemote(plain, skipDeps bool) error {
 		},
 		{
 			Title: "Downloading dependencies",
-			Skip: func() (string, bool) {
-				if skipDeps {
-					return "skipped (--skip-deps)", true
-				}
-				return "", false
-			},
+			Skip:  out.skipDeps(skipDeps),
 			Run: func(r tui.Reporter) (string, error) {
 				r.Detail("gleam deps download")
 				if err := gleam.Run(dir, "deps", "download"); err != nil {
@@ -265,13 +258,11 @@ func runAddRemote(plain, skipDeps bool) error {
 			},
 		},
 	}
-	if err := tui.Run("howdy add remote", steps, plain); err != nil {
+	if err := out.run("howdy add remote", steps); err != nil {
 		return err
 	}
 
-	for i, note := range notes {
-		notes[i] = "Needs a hand: " + note
-	}
+	var notes []string
 	notes = append(notes,
 		fmt.Sprintf("Define procedures in %s and answer them in server() in %s.", rm.ProceduresFile(), rm.RPCFile()),
 		"Call another service with remote.call(remote.cluster(), its_api.get_user(), 42, timeout: 5000), or a",
@@ -282,12 +273,12 @@ func runAddRemote(plain, skipDeps bool) error {
 		{Cmd: "ERL_FLAGS=\"-sname " + project.Name + " -setcookie <cookie>\" gleam dev", Note: "serve the procedures to other nodes"},
 		{Cmd: "gleam test", Note: "call the example procedure on the cluster and over HTTP"},
 	}
-	fmt.Print(tui.NextSteps("remote", commands, notes))
-	return nil
+	return out.done("howdy add remote", "remote", commands, notes, manual)
 }
 
 func addOpenAPICommand() *cobra.Command {
-	var plain, skipDeps bool
+	var skipDeps bool
+	out := &output{}
 	cmd := &cobra.Command{
 		Use:   "openapi",
 		Short: "Add an OpenAPI document with Howdy OpenAPI, served by the app and browsable in the dev admin",
@@ -312,16 +303,17 @@ can call them.`,
 		Example: "  howdy add openapi",
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runAddOpenAPI(plain, skipDeps)
+			return runAddOpenAPI(out, skipDeps)
 		},
 	}
 	cmd.Flags().BoolVar(&skipDeps, "skip-deps", false, "do not run 'gleam deps download' after changing gleam.toml")
-	cmd.Flags().BoolVar(&plain, "plain", false, "print progress as plain lines instead of animating")
+	out.flags(cmd, true)
 	return cmd
 }
 
-func runAddOpenAPI(plain, skipDeps bool) error {
-	dir, err := findProjectDir()
+func runAddOpenAPI(out *output, skipDeps bool) error {
+	defer out.cleanup()
+	dir, err := out.projectDir()
 	if err != nil {
 		return err
 	}
@@ -335,7 +327,7 @@ func runAddOpenAPI(plain, skipDeps bool) error {
 	}
 
 	var gleam tools.Tool
-	var notes []string
+	var manual []string
 	steps := []tui.Step{
 		{
 			Title: "Checking for Gleam",
@@ -361,8 +353,8 @@ func runAddOpenAPI(plain, skipDeps bool) error {
 		{
 			Title: "Serving the document",
 			Run: func(r tui.Reporter) (string, error) {
-				notes = o.Register()
-				if len(notes) > 0 {
+				manual = o.Register()
+				if len(manual) > 0 {
 					return "needs a hand, see below", nil
 				}
 				if o.Admin {
@@ -371,6 +363,7 @@ func runAddOpenAPI(plain, skipDeps bool) error {
 				return "/openapi.json, /docs", nil
 			},
 		},
+		noteForAgents(project, "openapi"),
 		{
 			Title: "Formatting Gleam sources",
 			Run: func(r tui.Reporter) (string, error) {
@@ -379,12 +372,7 @@ func runAddOpenAPI(plain, skipDeps bool) error {
 		},
 		{
 			Title: "Downloading dependencies",
-			Skip: func() (string, bool) {
-				if skipDeps {
-					return "skipped (--skip-deps)", true
-				}
-				return "", false
-			},
+			Skip:  out.skipDeps(skipDeps),
 			Run: func(r tui.Reporter) (string, error) {
 				r.Detail("gleam deps download")
 				if err := gleam.Run(dir, "deps", "download"); err != nil {
@@ -395,13 +383,11 @@ func runAddOpenAPI(plain, skipDeps bool) error {
 			},
 		},
 	}
-	if err := tui.Run("howdy add openapi", steps, plain); err != nil {
+	if err := out.run("howdy add openapi", steps); err != nil {
 		return err
 	}
 
-	for i, note := range notes {
-		notes[i] = "Needs a hand: " + note
-	}
+	var notes []string
 	if o.Admin {
 		notes = append(notes, "The admin at /_howdy lists every documented endpoint under API, and can call them.")
 	}
@@ -413,12 +399,12 @@ func runAddOpenAPI(plain, skipDeps bool) error {
 		{Cmd: "gleam dev", Note: "then read the API at http://127.0.0.1:8787/docs"},
 		{Cmd: "gleam test", Note: "check the document is served"},
 	}
-	fmt.Print(tui.NextSteps("openapi", commands, notes))
-	return nil
+	return out.done("howdy add openapi", "openapi", commands, notes, manual)
 }
 
 func addAuthCommand() *cobra.Command {
-	var plain, skipDeps bool
+	var skipDeps bool
+	out := &output{}
 	cmd := &cobra.Command{
 		Use:   "auth",
 		Short: "Add sign-in and roles with Howdy Auth, wired into the app, the tests and the dev admin",
@@ -451,16 +437,17 @@ auth.required(services.identity)).`,
 		Example: "  howdy add auth",
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runAddAuth(plain, skipDeps)
+			return runAddAuth(out, skipDeps)
 		},
 	}
 	cmd.Flags().BoolVar(&skipDeps, "skip-deps", false, "do not run 'gleam deps download' after changing gleam.toml")
-	cmd.Flags().BoolVar(&plain, "plain", false, "print progress as plain lines instead of animating")
+	out.flags(cmd, true)
 	return cmd
 }
 
-func runAddAuth(plain, skipDeps bool) error {
-	dir, err := findProjectDir()
+func runAddAuth(out *output, skipDeps bool) error {
+	defer out.cleanup()
+	dir, err := out.projectDir()
 	if err != nil {
 		return err
 	}
@@ -474,7 +461,7 @@ func runAddAuth(plain, skipDeps bool) error {
 	}
 
 	var gleam tools.Tool
-	var notes []string
+	var manual []string
 	steps := []tui.Step{
 		{
 			Title: "Checking for Gleam",
@@ -503,8 +490,8 @@ func runAddAuth(plain, skipDeps bool) error {
 		{
 			Title: "Wiring up sign-in and roles",
 			Run: func(r tui.Reporter) (string, error) {
-				notes = a.Register()
-				if len(notes) > 0 {
+				manual = a.Register()
+				if len(manual) > 0 {
 					return "needs a hand, see below", nil
 				}
 				if a.Admin {
@@ -513,6 +500,7 @@ func runAddAuth(plain, skipDeps bool) error {
 				return "services, routes, migrations, tests", nil
 			},
 		},
+		noteForAgents(project, a.AgentNotes()...),
 		{
 			Title: "Formatting Gleam sources",
 			Run: func(r tui.Reporter) (string, error) {
@@ -521,12 +509,7 @@ func runAddAuth(plain, skipDeps bool) error {
 		},
 		{
 			Title: "Downloading dependencies",
-			Skip: func() (string, bool) {
-				if skipDeps {
-					return "skipped (--skip-deps)", true
-				}
-				return "", false
-			},
+			Skip:  out.skipDeps(skipDeps),
 			Run: func(r tui.Reporter) (string, error) {
 				r.Detail("gleam deps download")
 				if err := gleam.Run(dir, "deps", "download"); err != nil {
@@ -537,13 +520,11 @@ func runAddAuth(plain, skipDeps bool) error {
 			},
 		},
 	}
-	if err := tui.Run("howdy add auth", steps, plain); err != nil {
+	if err := out.run("howdy add auth", steps); err != nil {
 		return err
 	}
 
-	for i, note := range notes {
-		notes[i] = "Needs a hand: " + note
-	}
+	var notes []string
 	if a.Admin {
 		notes = append(notes, "The sign-in email arrives in the admin at /_howdy under Mail; users, groups and roles are there too.")
 	}
@@ -563,12 +544,12 @@ func runAddAuth(plain, skipDeps bool) error {
 	commands = append(commands,
 		tui.Command{Cmd: "gleam test", Note: "run the tests, including auth's"},
 	)
-	fmt.Print(tui.NextSteps("auth", commands, notes))
-	return nil
+	return out.done("howdy add auth", "auth", commands, notes, manual)
 }
 
 func addMailCommand() *cobra.Command {
-	var plain, skipDeps bool
+	var skipDeps bool
+	out := &output{}
 	cmd := &cobra.Command{
 		Use:   "mail",
 		Short: "Add email: Howdy Mail, a mailer in the app's services, and the outbox in the dev admin",
@@ -595,16 +576,17 @@ Add more emails with 'howdy create email <name>'.`,
 		Example: "  howdy add mail",
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runAddMail(plain, skipDeps)
+			return runAddMail(out, skipDeps)
 		},
 	}
 	cmd.Flags().BoolVar(&skipDeps, "skip-deps", false, "do not run 'gleam deps download' after changing gleam.toml")
-	cmd.Flags().BoolVar(&plain, "plain", false, "print progress as plain lines instead of animating")
+	out.flags(cmd, true)
 	return cmd
 }
 
-func runAddMail(plain, skipDeps bool) error {
-	dir, err := findProjectDir()
+func runAddMail(out *output, skipDeps bool) error {
+	defer out.cleanup()
+	dir, err := out.projectDir()
 	if err != nil {
 		return err
 	}
@@ -618,7 +600,7 @@ func runAddMail(plain, skipDeps bool) error {
 	}
 
 	var gleam tools.Tool
-	var notes []string
+	var manual []string
 	steps := []tui.Step{
 		{
 			Title: "Checking for Gleam",
@@ -644,8 +626,8 @@ func runAddMail(plain, skipDeps bool) error {
 		{
 			Title: "Wiring up the mailer",
 			Run: func(r tui.Reporter) (string, error) {
-				notes = m.Register()
-				if len(notes) > 0 {
+				manual = m.Register()
+				if len(manual) > 0 {
 					return "needs a hand, see below", nil
 				}
 				if m.Admin {
@@ -654,6 +636,7 @@ func runAddMail(plain, skipDeps bool) error {
 				return "services, dev outbox, tests", nil
 			},
 		},
+		noteForAgents(project, "mail"),
 		{
 			Title: "Formatting Gleam sources",
 			Run: func(r tui.Reporter) (string, error) {
@@ -662,12 +645,7 @@ func runAddMail(plain, skipDeps bool) error {
 		},
 		{
 			Title: "Downloading dependencies",
-			Skip: func() (string, bool) {
-				if skipDeps {
-					return "skipped (--skip-deps)", true
-				}
-				return "", false
-			},
+			Skip:  out.skipDeps(skipDeps),
 			Run: func(r tui.Reporter) (string, error) {
 				r.Detail("gleam deps download")
 				if err := gleam.Run(dir, "deps", "download"); err != nil {
@@ -678,10 +656,11 @@ func runAddMail(plain, skipDeps bool) error {
 			},
 		},
 	}
-	if err := tui.Run("howdy add mail", steps, plain); err != nil {
+	if err := out.run("howdy add mail", steps); err != nil {
 		return err
 	}
 
+	var notes []string
 	n := project.Name
 	commands := []tui.Command{}
 	if m.Admin {
@@ -693,16 +672,34 @@ func runAddMail(plain, skipDeps bool) error {
 		tui.Command{Cmd: "howdy create email <name>", Note: "add another email, with its preview"},
 		tui.Command{Cmd: "gleam test", Note: "check that every email can be sent"},
 	)
-	// What could not be done goes first, so it is not missed.
-	for i, note := range notes {
-		notes[i] = "Needs a hand: " + note
-	}
 	notes = append(notes, []string{
 		fmt.Sprintf("Send from a controller with the mailer in the app's services: pass services.mailer to it in src/%s.gleam, then", n),
 		"mail.send(mailer, welcome_email.build(to: mail.address(\"ada@example.com\"))).",
 		fmt.Sprintf("Emails live in src/%s/emails/; write them with smail. For gleam run, set MAIL_FROM and one of", n),
 		"SMTP_URL, RESEND_API_KEY or SENDGRID_API_KEY (see .env.example); without one, email is logged.",
 	}...)
-	fmt.Print(tui.NextSteps("mail", commands, notes))
-	return nil
+	return out.done("howdy add mail", "mail", commands, notes, manual)
+}
+
+// noteForAgents is the step that adds a section on each package to the
+// project's AGENTS.md, so coding agents working on it know how to use them.
+func noteForAgents(project *generate.Project, pkgs ...string) tui.Step {
+	return tui.Step{
+		Title: "Noting it for coding agents",
+		Run: func(r tui.Reporter) (string, error) {
+			changed := false
+			for _, pkg := range pkgs {
+				ok, err := project.NoteForAgents(pkg)
+				if err != nil {
+					return "", err
+				}
+				changed = changed || ok
+			}
+			if !changed {
+				return "no AGENTS.md to add to", nil
+			}
+			r.Log(generate.AgentsFile)
+			return generate.AgentsFile, nil
+		},
+	}
 }

@@ -31,7 +31,7 @@ func createCommand() *cobra.Command {
 }
 
 func createEmailCommand() *cobra.Command {
-	var plain bool
+	out := &output{}
 	cmd := &cobra.Command{
 		Use:   "email <name>",
 		Short: "Create an email, with its preview for the dev admin",
@@ -44,15 +44,16 @@ The project needs mail first: 'howdy add mail'.`,
 		Example: "  howdy create email password_reset\n  howdy create email order_shipped",
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runCreateEmail(args[0], plain)
+			return runCreateEmail(args[0], out)
 		},
 	}
-	cmd.Flags().BoolVar(&plain, "plain", false, "print progress as plain lines instead of animating")
+	out.flags(cmd, true)
 	return cmd
 }
 
-func runCreateEmail(name string, plain bool) error {
-	dir, err := findProjectDir()
+func runCreateEmail(name string, out *output) error {
+	defer out.cleanup()
+	dir, err := out.projectDir()
 	if err != nil {
 		return err
 	}
@@ -64,7 +65,7 @@ func runCreateEmail(name string, plain bool) error {
 	if err != nil {
 		return err
 	}
-	var notes []string
+	var manual []string
 	steps := []tui.Step{
 		{
 			Title: "Creating the email",
@@ -75,8 +76,8 @@ func runCreateEmail(name string, plain bool) error {
 		{
 			Title: "Adding its preview",
 			Run: func(r tui.Reporter) (string, error) {
-				notes = email.Register()
-				if len(notes) > 0 {
+				manual = email.Register()
+				if len(manual) > 0 {
 					return "needs a hand, see below", nil
 				}
 				return fmt.Sprintf("src/%s/emails/previews.gleam", project.Name), nil
@@ -94,22 +95,22 @@ func runCreateEmail(name string, plain bool) error {
 			},
 		},
 	}
-	if err := tui.Run(fmt.Sprintf("howdy create email %s", email.Name), steps, plain); err != nil {
+	if err := out.run(fmt.Sprintf("howdy create email %s", email.Name), steps); err != nil {
 		return err
 	}
-	notes = append([]string{
+	notes := []string{
 		fmt.Sprintf("Write the email in %s, and give build the arguments it needs.", email.File()),
 		fmt.Sprintf("Send it with mail.send(mailer, %s.build(to: address)), using the mailer in the app's services.", email.Module()),
-	}, notes...)
-	fmt.Print(tui.NextSteps(email.Module(), []tui.Command{
+	}
+	return out.done(commandLine("howdy create email", email.Name), email.Module(), []tui.Command{
 		{Cmd: "gleam dev", Note: "then see it under Mail in the admin at http://127.0.0.1:8787/_howdy"},
 		{Cmd: "gleam test", Note: "check that it can be sent"},
-	}, notes))
-	return nil
+	}, notes, manual)
 }
 
 func createComponentCommand(live bool) *cobra.Command {
-	var plain, addAuth bool
+	var addAuth bool
+	out := &output{}
 	cmd := &cobra.Command{
 		Use:   "component [controller] <name>",
 		Short: "Create a component, a piece of view to reuse on pages",
@@ -128,7 +129,7 @@ that it renders is written beside the other tests.`,
 			if len(args) == 2 {
 				controller, name = args[0], args[1]
 			}
-			return runCreateComponent(controller, name, live, addAuth, plain)
+			return runCreateComponent(controller, name, live, addAuth, out)
 		},
 	}
 	if live {
@@ -159,12 +160,13 @@ without.`
 		cmd.Example = "  howdy create live_component notifications\n  howdy create live_component blog comments\n  howdy create live_component notifications --add-auth"
 		cmd.Flags().BoolVar(&addAuth, "add-auth", false, "guard the components controller it creates with Howdy Auth, so only someone signed in reaches it (needs 'howdy add auth')")
 	}
-	cmd.Flags().BoolVar(&plain, "plain", false, "print progress as plain lines instead of animating")
+	out.flags(cmd, true)
 	return cmd
 }
 
-func runCreateComponent(controller, name string, live, addAuth, plain bool) error {
-	dir, err := findProjectDir()
+func runCreateComponent(controller, name string, live, addAuth bool, out *output) error {
+	defer out.cleanup()
+	dir, err := out.projectDir()
 	if err != nil {
 		return err
 	}
@@ -177,7 +179,7 @@ func runCreateComponent(controller, name string, live, addAuth, plain bool) erro
 		return err
 	}
 
-	var notes []string
+	var manual []string
 	steps := []tui.Step{
 		{
 			Title: "Creating files",
@@ -197,8 +199,8 @@ func runCreateComponent(controller, name string, live, addAuth, plain bool) erro
 		steps = append(steps, tui.Step{
 			Title: "Routing its socket",
 			Run: func(r tui.Reporter) (string, error) {
-				notes = component.Register()
-				if len(notes) > 0 {
+				manual = component.Register()
+				if len(manual) > 0 {
 					return "needs a hand, see below", nil
 				}
 				return component.ControllerFile(), nil
@@ -220,25 +222,26 @@ func runCreateComponent(controller, name string, live, addAuth, plain bool) erro
 	if live {
 		kind = "live_component"
 	}
-	title := strings.TrimSpace(fmt.Sprintf("howdy create %s %s %s", kind, controller, component.Name))
-	if err := tui.Run(strings.Join(strings.Fields(title), " "), steps, plain); err != nil {
+	title := commandLine("howdy create", kind, controller, component.Name)
+	if err := out.run(title, steps); err != nil {
 		return err
 	}
 
 	use := fmt.Sprintf("Use it in a page: import %s and add %s.view() to the page's content.", component.Import(), component.Module())
 	if live {
 		use = fmt.Sprintf("Put it on a page: import %s, add %s.mount() to the content, and render the page with render_live.", component.Import(), component.Module())
+	}
+	notes := []string{fmt.Sprintf("Build the component in %s.", component.File()), use}
+	if live {
 		notes = append(notes, fmt.Sprintf("Its socket is at %s, routed in %s.", component.URL(), component.ControllerFile()))
 	}
-	notes = append([]string{fmt.Sprintf("Build the component in %s.", component.File()), use}, notes...)
-	fmt.Print(tui.NextSteps(component.Module(), []tui.Command{
+	return out.done(title, component.Module(), []tui.Command{
 		{Cmd: "gleam test", Note: "run the tests, including the new one for the component"},
-	}, notes))
-	return nil
+	}, notes, manual)
 }
 
 func createLayoutCommand() *cobra.Command {
-	var plain bool
+	out := &output{}
 	cmd := &cobra.Command{
 		Use:   "layout <name>",
 		Short: "Create a layout that pages can render through",
@@ -253,15 +256,16 @@ live sections, which also loads the script they connect with. Pass
 		Example: "  howdy create layout admin\n  howdy create page admin index --layout admin",
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runCreateLayout(args[0], plain)
+			return runCreateLayout(args[0], out)
 		},
 	}
-	cmd.Flags().BoolVar(&plain, "plain", false, "print progress as plain lines instead of animating")
+	out.flags(cmd, true)
 	return cmd
 }
 
-func runCreateLayout(name string, plain bool) error {
-	dir, err := findProjectDir()
+func runCreateLayout(name string, out *output) error {
+	defer out.cleanup()
+	dir, err := out.projectDir()
 	if err != nil {
 		return err
 	}
@@ -292,20 +296,21 @@ func runCreateLayout(name string, plain bool) error {
 			},
 		},
 	}
-	if err := tui.Run(fmt.Sprintf("howdy create layout %s", layout.Name), steps, plain); err != nil {
+	title := commandLine("howdy create layout", layout.Name)
+	if err := out.run(title, steps); err != nil {
 		return err
 	}
-	fmt.Print(tui.NextSteps(layout.Module(), []tui.Command{
+	return out.done(title, layout.Module(), []tui.Command{
 		{Cmd: fmt.Sprintf("howdy create page <controller> <page> --layout %s", layout.Name), Note: "make a page that uses it"},
 	}, []string{
 		fmt.Sprintf("Change the layout in %s; it starts as a copy of the default.", layout.File()),
 		fmt.Sprintf("To move an existing page onto it, import %s/layouts/%s and call %s.render, or render_live for a live page.", project.Name, layout.Module(), layout.Module()),
-	}))
-	return nil
+	}, nil)
 }
 
 func createPageCommand(live bool) *cobra.Command {
-	var plain, addAuth bool
+	var addAuth bool
+	out := &output{}
 	var layout string
 	cmd := &cobra.Command{
 		Use:   "page <controller> <page>",
@@ -329,7 +334,7 @@ auth' first. A controller that exists keeps its guard, or lack of one, and
 		Example: "  howdy create page blog about\n  howdy create page blog index\n  howdy create page home contact\n  howdy create page admin index --layout admin\n  howdy create page account index --add-auth",
 		Args:    cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runCreatePage(args[0], args[1], live, layout, addAuth, plain)
+			return runCreatePage(args[0], args[1], live, layout, addAuth, out)
 		},
 	}
 	if live {
@@ -358,12 +363,13 @@ auth' first. A controller that exists keeps its guard, or lack of one, and
 	}
 	cmd.Flags().StringVar(&layout, "layout", "", "render the page through this layout from src/<project>/layouts/ instead of the default")
 	cmd.Flags().BoolVar(&addAuth, "add-auth", false, "guard the controller it creates with Howdy Auth, so only someone signed in reaches its pages (needs 'howdy add auth')")
-	cmd.Flags().BoolVar(&plain, "plain", false, "print progress as plain lines instead of animating")
+	out.flags(cmd, true)
 	return cmd
 }
 
-func runCreatePage(controller, name string, live bool, layout string, addAuth, plain bool) error {
-	dir, err := findProjectDir()
+func runCreatePage(controller, name string, live bool, layout string, addAuth bool, out *output) error {
+	defer out.cleanup()
+	dir, err := out.projectDir()
 	if err != nil {
 		return err
 	}
@@ -380,7 +386,7 @@ func runCreatePage(controller, name string, live bool, layout string, addAuth, p
 		registered += fmt.Sprintf(", src/%s.gleam", project.Name)
 	}
 
-	var notes []string
+	var manual []string
 	steps := []tui.Step{
 		{
 			Title: "Creating files",
@@ -398,8 +404,8 @@ func runCreatePage(controller, name string, live bool, layout string, addAuth, p
 		{
 			Title: "Adding the routes",
 			Run: func(r tui.Reporter) (string, error) {
-				notes = page.Register()
-				if len(notes) > 0 {
+				manual = page.Register()
+				if len(manual) > 0 {
 					return "needs a hand, see below", nil
 				}
 				return registered, nil
@@ -421,10 +427,12 @@ func runCreatePage(controller, name string, live bool, layout string, addAuth, p
 	if live {
 		kind = "live_page"
 	}
-	if err := tui.Run(fmt.Sprintf("howdy create %s %s %s", kind, controller, page.Name), steps, plain); err != nil {
+	title := commandLine("howdy create", kind, controller, page.Name)
+	if err := out.run(title, steps); err != nil {
 		return err
 	}
 
+	var notes []string
 	if !page.Exists {
 		notes = append(notes, fmt.Sprintf("The new %s controller is registered in src/%s.gleam.", controller, project.Name))
 	}
@@ -432,15 +440,15 @@ func runCreatePage(controller, name string, live bool, layout string, addAuth, p
 		notes = append(notes, fmt.Sprintf("Only someone signed in reaches %s; ctx.guard.user is the signed-in user.", page.URL()))
 	}
 	notes = append(notes, fmt.Sprintf("Add the page's content in %s. It renders through %s.", page.File(), project.LayoutFile(page.Layout)))
-	fmt.Print(tui.NextSteps(page.Module(), []tui.Command{
+	return out.done(title, page.Module(), []tui.Command{
 		{Cmd: "gleam dev", Note: "then open http://127.0.0.1:8787" + page.URL()},
 		{Cmd: "gleam test", Note: "run the tests, including the new one for the page"},
-	}, notes))
-	return nil
+	}, notes, manual)
 }
 
 func createControllerCommand() *cobra.Command {
-	var plain, addAuth bool
+	var addAuth bool
+	out := &output{}
 	cmd := &cobra.Command{
 		Use:   "controller <plural> <singular> <field:type>...",
 		Short: "Create a JSON controller with its record, database operations and migration",
@@ -471,16 +479,16 @@ controller takes the app's identity, and its tests sign in.`,
 		Example: "  howdy create controller users user name:string age:int\n  howdy create controller blog_posts blog_post title body:string published:bool\n  howdy create controller notes note body --add-auth",
 		Args:    cobra.MinimumNArgs(3),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runCreateSlice("controller", args[0], args[1], args[2:], "", addAuth, plain)
+			return runCreateSlice("controller", args[0], args[1], args[2:], "", addAuth, out)
 		},
 	}
 	cmd.Flags().BoolVar(&addAuth, "add-auth", false, "guard every route with Howdy Auth, so only someone signed in reaches them (needs 'howdy add auth')")
-	cmd.Flags().BoolVar(&plain, "plain", false, "print progress as plain lines instead of animating")
+	out.flags(cmd, true)
 	return cmd
 }
 
 func createRepoCommand() *cobra.Command {
-	var plain bool
+	out := &output{}
 	cmd := &cobra.Command{
 		Use:   "repo <plural> <singular> <field:type>...",
 		Short: "Create a record with its database operations and migration, without a controller",
@@ -501,15 +509,16 @@ name is a string. Every record also gets an integer id.`,
 		Example: "  howdy create repo users user name:string email:string age:int",
 		Args:    cobra.MinimumNArgs(3),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runCreateSlice("repo", args[0], args[1], args[2:], "", false, plain)
+			return runCreateSlice("repo", args[0], args[1], args[2:], "", false, out)
 		},
 	}
-	cmd.Flags().BoolVar(&plain, "plain", false, "print progress as plain lines instead of animating")
+	out.flags(cmd, true)
 	return cmd
 }
 
 func createPagesCommand() *cobra.Command {
-	var plain, api, addAuth bool
+	var api, addAuth bool
+	out := &output{}
 	var layout string
 	cmd := &cobra.Command{
 		Use:   "pages <plural> <singular> <field:type>...",
@@ -562,18 +571,18 @@ tests sign in.`,
 			if api {
 				kind = "pages+api"
 			}
-			return runCreateSlice(kind, args[0], args[1], args[2:], layout, addAuth, plain)
+			return runCreateSlice(kind, args[0], args[1], args[2:], layout, addAuth, out)
 		},
 	}
 	cmd.Flags().BoolVar(&api, "api", false, "also create the JSON controller under /api/<plural>")
 	cmd.Flags().BoolVar(&addAuth, "add-auth", false, "guard every route with Howdy Auth, so only someone signed in reaches them (needs 'howdy add auth')")
 	cmd.Flags().StringVar(&layout, "layout", "", "render the pages through this layout from src/<project>/layouts/ instead of the default")
-	cmd.Flags().BoolVar(&plain, "plain", false, "print progress as plain lines instead of animating")
+	out.flags(cmd, true)
 	return cmd
 }
 
 func createMigrationCommand() *cobra.Command {
-	var plain bool
+	out := &output{}
 	cmd := &cobra.Command{
 		Use:   "migration <table> <field:type>...",
 		Short: "Create a migration for a new table",
@@ -588,17 +597,18 @@ Column types follow the project's database, SQLite or PostgreSQL.`,
 		Example: "  howdy create migration users name:string email:string age:int",
 		Args:    cobra.MinimumNArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runCreateSlice("migration", args[0], "", args[1:], "", false, plain)
+			return runCreateSlice("migration", args[0], "", args[1:], "", false, out)
 		},
 	}
-	cmd.Flags().BoolVar(&plain, "plain", false, "print progress as plain lines instead of animating")
+	out.flags(cmd, true)
 	return cmd
 }
 
 // runCreateSlice serves every subcommand; kind is "controller", "pages",
 // "pages+api", "repo" or "migration", and singular is empty for a migration.
-func runCreateSlice(kind, plural, singular string, fields []string, layout string, addAuth, plain bool) error {
-	dir, err := findProjectDir()
+func runCreateSlice(kind, plural, singular string, fields []string, layout string, addAuth bool, out *output) error {
+	defer out.cleanup()
+	dir, err := out.projectDir()
 	if err != nil {
 		return err
 	}
@@ -638,7 +648,7 @@ func runCreateSlice(kind, plural, singular string, fields []string, layout strin
 		registered = fmt.Sprintf("src/%s.gleam, platform/database.gleam", project.Name)
 	}
 
-	var notes []string
+	var manual []string
 	steps := []tui.Step{
 		{
 			Title: "Creating files",
@@ -659,8 +669,8 @@ func runCreateSlice(kind, plural, singular string, fields []string, layout strin
 		{
 			Title: registering,
 			Run: func(r tui.Reporter) (string, error) {
-				notes = slice.Register()
-				if len(notes) > 0 {
+				manual = slice.Register()
+				if len(manual) > 0 {
 					return "needs a hand, see below", nil
 				}
 				return registered, nil
@@ -679,17 +689,16 @@ func runCreateSlice(kind, plural, singular string, fields []string, layout strin
 		},
 	}
 	title := fmt.Sprintf("howdy create %s %s", kind, plural)
-	if err := tui.Run(title, steps, plain); err != nil {
+	if err := out.run(title, steps); err != nil {
 		return err
 	}
 
-	notes = append(notes, fmt.Sprintf("The %s table is created by migration %d the next time the app starts.", plural, slice.Version))
+	notes := []string{fmt.Sprintf("The %s table is created by migration %d the next time the app starts.", plural, slice.Version)}
 	if kind == "migration" {
 		notes = append(notes, fmt.Sprintf("Edit src/%s/migrations/%s.gleam to add defaults, unique columns or indexes before it runs.", project.Name, slice.MigrationModule()))
-		fmt.Print(tui.NextSteps(slice.MigrationModule(), []tui.Command{
+		return out.done(title, slice.MigrationModule(), []tui.Command{
 			{Cmd: "gleam run -m tasks/migrate", Note: "apply it now, without starting the server"},
-		}, notes))
-		return nil
+		}, notes, manual)
 	}
 	notes = append(notes, fmt.Sprintf("Add validation rules in %s.gleam.", filepath.ToSlash(filepath.Join(project.FeatureDir(plural), singular))))
 	if slice.Auth {
@@ -705,6 +714,5 @@ func runCreateSlice(kind, plural, singular string, fields []string, layout strin
 	default:
 		notes = append(notes, fmt.Sprintf("Use it from your code with import %s/%s and %s.all(db).", project.FeatureImport(plural), plural, plural))
 	}
-	fmt.Print(tui.NextSteps(plural, commands, notes))
-	return nil
+	return out.done(title, plural, commands, notes, manual)
 }

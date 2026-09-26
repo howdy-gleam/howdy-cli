@@ -2,6 +2,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
@@ -28,10 +29,21 @@ func Execute() error {
 	root.AddCommand(createCommand())
 	root.AddCommand(addCommand())
 	root.AddCommand(devCommand())
+	root.AddCommand(routesCommand())
+	root.AddCommand(checkCommand())
 
-	err := root.Execute()
-	if err != nil {
-		fmt.Fprintln(os.Stderr, tui.ErrorLine(err.Error()))
+	cmd, err := root.ExecuteC()
+	if err == nil {
+		return nil
 	}
+	if errors.Is(err, errReported) {
+		return err
+	}
+	// A command run with --json reports its error the same way, on stdout.
+	if asJSON, _ := cmd.Flags().GetBool("json"); asJSON {
+		failed(os.Stdout, cmd.CommandPath(), err)
+		return err
+	}
+	fmt.Fprintln(os.Stderr, tui.ErrorLine(err.Error()))
 	return err
 }

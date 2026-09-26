@@ -250,3 +250,12 @@ pub fn migrate(db: Repo) -> Result(Int, String) {
 `
 	return addImports(text, append([]string{"import gleam/result"}, imports...)...), nil
 }
+
+// AgentNotes names the packages whose sections 'howdy add auth' adds to
+// AGENTS.md: auth, and mail when it is added too.
+func (a *Auth) AgentNotes() []string {
+	if a.Mail != nil {
+		return []string{"auth", "mail"}
+	}
+	return []string{"auth"}
+}

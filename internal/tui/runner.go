@@ -44,6 +44,23 @@ func Run(title string, steps []Step, plain bool) error {
 	return runAnimated(title, steps)
 }
 
+// RunSilent executes the steps in order like Run, printing nothing: what
+// the steps report goes to r. It stops at the first failing step and
+// returns its error.
+func RunSilent(steps []Step, r Reporter) error {
+	for _, s := range steps {
+		if s.Skip != nil {
+			if _, skip := s.Skip(); skip {
+				continue
+			}
+		}
+		if _, err := s.Run(r); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // -- Plain output ------------------------------------------------------------
 
 type plainReporter struct{}

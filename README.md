@@ -42,6 +42,9 @@ Every project is also set up for development with the rest of Howdy:
 
 Pass `--minimal` to leave all three out.
 
+Every project also has an `AGENTS.md` for coding agents, with `CLAUDE.md`
+importing it: see [Working with coding agents](#working-with-coding-agents).
+
 Pass `--api-only` for a JSON backend with no pages: the project leaves out
 Howdy UI and Lustre, the home page, layouts, static files, the stylesheet
 task and the HTML 404 page, and serves a health check at `GET /health`
@@ -400,6 +403,45 @@ howdy create email password_reset
 writes `emails/password_reset_email.gleam`, with `build(to:)` and
 `preview()`, and adds the preview to `emails/previews.gleam`.
 
+## Working with coding agents
+
+Every project gets an `AGENTS.md`, a guide for coding agents written for
+the options it was made with: how to check a change, which `howdy`
+commands to use rather than writing code by hand, where things go, and the
+project's conventions. `CLAUDE.md` imports it for Claude Code. Each
+`howdy add` appends a short section on the package it installs, once, to
+an `AGENTS.md` that is there; a project made before the file existed is
+left alone.
+
+Every `new`, `create` and `add` command takes
+
+- `--json` to print one JSON object in place of the progress and closing
+  notes: the files `created` and `modified`, `manual_steps` it could not
+  do itself (such as registering a controller in a file whose shape it did
+  not recognise), `warnings`, the `next` commands to run and `notes`. A
+  command that fails prints `{"ok": false, "error": ...}` and exits with
+  status 1.
+- `--dry-run` to see which files it would create and modify without
+  changing anything. The command runs on a copy of the project in a
+  temporary directory, including `gleam format`, and the copy is then
+  compared with the project; dependencies are not downloaded.
+
+Two commands describe a project:
+
+```sh
+howdy routes         # every route: method, path, controller and file:line
+howdy check          # gleam format --check, gleam build, gleam test
+```
+
+`howdy routes` reads the sources rather than building the app: the
+controllers registered in `app()` in `src/<project>.gleam`, in order, and
+the routes each declares, with the mounts that packages serve (static
+files, auth, the OpenAPI document) and what `dev/` adds under `gleam dev`.
+`howdy check` runs every check, skipping the tests when the build fails,
+shows the output of the ones that fail and the compiler's warnings, and
+exits with status 1 if any failed; `--fix` formats instead of checking the
+formatting. Both take `--json`.
+
 ## Build
 
 Requires Go 1.25+.
@@ -420,8 +462,9 @@ go install .
 ```text
 main.go
 internal/
-├── cli/        cobra commands (root, new, create, add, dev)
+├── cli/        cobra commands (root, new, create, add, dev, routes, check), and the --json and --dry-run output
 ├── generate/   `howdy create controller`, `pages`, `repo`, `migration`, `page`, `live_page`, `layout`, `component`, `live_component` and `email`, and `howdy add mail`, `auth`, `remote`, `openapi` and `flags`: templates and wiring
+├── inspect/    reading a project's sources for `howdy routes`
 ├── scaffold/   project validation and template rendering
 │   └── templates/
 │       ├── base/      the page-only project, rendered with text/template

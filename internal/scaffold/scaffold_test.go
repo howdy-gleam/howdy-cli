@@ -1,6 +1,7 @@
 package scaffold
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -414,6 +415,54 @@ func TestAPIProject(t *testing.T) {
 					if !strings.Contains(byPath[path], want) {
 						t.Errorf("%s (%s) should contain %q", path, label, want)
 					}
+				}
+			}
+		}
+	}
+}
+
+func TestAgentGuide(t *testing.T) {
+	for _, api := range []bool{false, true} {
+		for _, minimal := range []bool{false, true} {
+			for _, db := range []Database{NoDatabase, SQLite, Postgres} {
+				label := fmt.Sprintf("%s, api %t, minimal %t", db.Label(), api, minimal)
+				p, err := New(filepath.Join(t.TempDir(), "demo_site"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				p.Database, p.Minimal, p.API = db, minimal, api
+				files, err := p.Files()
+				if err != nil {
+					t.Fatal(err)
+				}
+				byPath := map[string]string{}
+				for _, f := range files {
+					byPath[f.Path] = string(f.Content)
+				}
+				if byPath["CLAUDE.md"] != "@AGENTS.md\n" {
+					t.Errorf("CLAUDE.md (%s) should import AGENTS.md: %q", label, byPath["CLAUDE.md"])
+				}
+				guide := byPath["AGENTS.md"]
+				for _, want := range []string{"howdy check", "howdy routes", "--dry-run", "src/demo_site.gleam", "v" + Release} {
+					if !strings.Contains(guide, want) {
+						t.Errorf("AGENTS.md (%s) should mention %q", label, want)
+					}
+				}
+				has := func(s string) bool { return strings.Contains(guide, s) }
+				if has("howdy create controller") != (db != NoDatabase) {
+					t.Errorf("AGENTS.md (%s) should offer create controller only with a database", label)
+				}
+				if has("howdy create page ") == api {
+					t.Errorf("AGENTS.md (%s) should offer create page only with pages", label)
+				}
+				if has("/_howdy") == minimal {
+					t.Errorf("AGENTS.md (%s) should mention the admin only when it has one", label)
+				}
+				if has("docker compose") != (db == Postgres) {
+					t.Errorf("AGENTS.md (%s) should mention docker compose only for PostgreSQL", label)
+				}
+				if strings.Contains(guide, "\n\n\n") || strings.Contains(guide, "<no value>") {
+					t.Errorf("AGENTS.md (%s) is badly rendered:\n%s", label, guide)
 				}
 			}
 		}

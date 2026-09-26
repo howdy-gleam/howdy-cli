@@ -49,3 +49,15 @@ func (t Tool) Run(dir string, args ...string) error {
 	}
 	return nil
 }
+
+// Output executes the tool in dir and returns its combined output, which
+// is wanted whether it succeeds, as with the compiler's warnings, or not.
+func (t Tool) Output(dir string, args ...string) (string, error) {
+	cmd := exec.Command(t.Path, args...)
+	cmd.Dir = dir
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &out
+	err := cmd.Run()
+	return strings.TrimSpace(out.String()), err
+}
