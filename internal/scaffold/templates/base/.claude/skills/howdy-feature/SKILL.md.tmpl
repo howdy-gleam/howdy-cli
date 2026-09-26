@@ -1,0 +1,99 @@
+---
+name: howdy-feature
+description: Build a new feature in this Howdy app end to end - choose and run the right `howdy create` generator, adapt what it writes, add tests and check the result. Use when asked to add a resource, endpoint, {{if not .API}}page, {{end}}screen or other new functionality.
+---
+
+# Building a feature
+
+Work in this order. Each step has a check; do not move on until it passes.
+
+## 1. Find out what exists
+
+```sh
+howdy routes         # every route, its controller and file:line
+```
+
+Read `src/{{.Name}}.gleam` (the `Services` record and `app`, which
+registers every controller) and one existing feature under
+`src/{{.Name}}/features/` that is close to what you are building. Copy its
+shape rather than inventing a new one.
+
+## 2. Generate the skeleton
+
+Pick the generator that writes the most of what you need:
+
+| You need | Run |
+| --- | --- |
+{{- if .Database}}
+| data with a JSON API | `howdy create controller <plural> <singular> field:type ...` |
+{{- if not .API}}
+| data people manage in the browser | `howdy create pages <plural> <singular> field:type ...` (add `--api` for JSON too) |
+{{- end}}
+| data used only from other code | `howdy create repo <plural> <singular> field:type ...` |
+| a table on its own | `howdy create migration <table> field:type ...` |
+{{- end}}
+{{- if not .API}}
+| one page | `howdy create page <feature> <page>` |
+| a page that updates live | `howdy create live_page <feature> <page>` |
+| a reusable piece of view | `howdy create component [feature] <name>` |
+{{- end}}
+| routes that are not about stored data | write a controller by hand (see the howdy-controllers skill) |
+
+{{- if .Database}}
+
+Field types are `string`, `int`, `float` and `bool`; a bare name is a
+string, and every record gets an integer `id`. Names must not be SQL
+keywords (`order`, `user`, `key` ...) or Gleam keywords: use `orders order`,
+`accounts account`. The plural and singular must differ.
+{{- end}}
+
+Always look before you leap:
+
+```sh
+howdy create controller notes note body:string --dry-run --json
+```
+
+then run it without `--dry-run`. With `--json`, `created` and `modified`
+list every file touched, and anything in `manual_steps` is wiring you must
+do yourself. Do it before going on.
+{{- if .Database}}
+
+To change fields later, do not re-run the generator or edit the old
+migration: follow the howdy-database skill.
+{{- end}}
+
+## 3. Adapt it
+
+The generator writes working CRUD. Now make it the feature you were asked
+for:
+{{- if .Database}}
+
+- Validation lives in `<singular>.gleam`, in `validate`: add rules such as
+  `validate.max_length(200)`, `validate.email()` or `validate.min(0)` to the
+  field's list.
+- New queries (find by email, filter, order, count) go in `<plural>.gleam`,
+  next to `all` and `find`; see the howdy-database skill.
+{{- end}}
+- New routes go in `<feature>_controller.gleam`. Fixed paths (`/new`,
+  `/search`) must come before ones with a parameter (`/:id`).
+- A controller is only served once it is registered in `app` in
+  `src/{{.Name}}.gleam`, ahead of {{if .API}}the `howdy.not_found` handler{{else}}the static catch-all{{end}}. The generators do
+  this; a hand-written controller needs `|> howdy.controller(x.controller(...))`.
+- Keep feature code in the feature's folder. The folders beside `features/`
+  belong to Howdy's generators.
+
+## 4. Test it
+
+Generated features come with tests. Extend them for what you changed:
+a test per rule you added, per route, per edge case (missing record, bad
+input). See the howdy-testing skill.
+
+## 5. Check
+
+```sh
+howdy check          # gleam format --check, gleam build, gleam test
+```
+
+Fix everything it reports, including warnings, then run it again.
+`howdy check --fix` formats the code for you. Finally look at `howdy routes`
+to confirm the routes are what you meant.

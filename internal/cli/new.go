@@ -20,6 +20,7 @@ type newOptions struct {
 	release    string
 	minimal    bool
 	apiOnly    bool
+	noAgents   bool
 	skipDeps   bool
 	out        output
 }
@@ -47,7 +48,8 @@ console.
 
 AGENTS.md tells coding agents how to work on the project: how to check a
 change, which howdy commands write code for them, and where things go.
-CLAUDE.md imports it for Claude Code.
+CLAUDE.md imports it for Claude Code, and .claude/skills/ holds guides for
+common tasks. Pass --no-agents to leave all three out.
 
 Pass --api-only for a JSON backend with no pages: it leaves out Howdy UI,
 Lustre, the home page, layouts, static files and the HTML 404 page, and
@@ -63,7 +65,7 @@ underscores, starting with a letter. It cannot be the name of a module that
 ships with Erlang, such as pg, auth or timer, which the project's own module
 would replace. A path such as apps/my_site also works; the last segment is the
 project name.`,
-		Example: "  howdy new my_site\n  howdy new my_site --database postgres\n  howdy new my_site --no-database\n  howdy new my_site --minimal\n  howdy new my_api --api-only\n  howdy new my_site --howdy 2.1.0\n  howdy new apps/my_site\n  howdy new my_site --dry-run --json",
+		Example: "  howdy new my_site\n  howdy new my_site --database postgres\n  howdy new my_site --no-database\n  howdy new my_site --minimal\n  howdy new my_api --api-only\n  howdy new my_site --no-agents\n  howdy new my_site --howdy 2.1.0\n  howdy new apps/my_site\n  howdy new my_site --dry-run --json",
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if opts.noDatabase && cmd.Flags().Changed("database") {
@@ -76,6 +78,7 @@ project name.`,
 	cmd.Flags().StringVar(&opts.database, "database", string(scaffold.SQLite), "database to use: sqlite or postgres")
 	cmd.Flags().StringVar(&opts.release, "howdy", scaffold.Release, "Howdy release to depend on, such as "+scaffold.Release)
 	cmd.Flags().BoolVar(&opts.minimal, "minimal", false, "leave out the admin, telemetry and the console")
+	cmd.Flags().BoolVar(&opts.noAgents, "no-agents", false, "leave out AGENTS.md, CLAUDE.md and the skills in .claude/skills/ for coding agents")
 	cmd.Flags().BoolVar(&opts.apiOnly, "api-only", false, "a JSON backend only: leave out Howdy UI, pages, layouts and static files")
 	cmd.Flags().BoolVar(&opts.skipDeps, "skip-deps", false, "do not run 'gleam deps download' after creating the files")
 	opts.out.flags(cmd, true)
@@ -102,6 +105,7 @@ func runNew(arg string, opts *newOptions) error {
 	project.Release = release
 	project.Minimal = opts.minimal
 	project.API = opts.apiOnly
+	project.NoAgents = opts.noAgents
 	files, err := project.Files()
 	if err != nil {
 		return err

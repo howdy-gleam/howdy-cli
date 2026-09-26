@@ -1,0 +1,129 @@
+---
+name: howdy-database
+description: Change this Howdy app's database schema or write queries with Gloo - add, rename or drop columns and tables, add indexes, and write finds, filters, ordering, counts and transactions in a feature's operations module. Use for any migration, any change to a record's fields, or any new query.
+---
+
+# The database
+
+This project uses {{if eq .Database "postgres"}}PostgreSQL{{else}}SQLite{{end}} through Gloo. The API is in
+[reference.md](reference.md); read it before writing a migration or a
+query you have not seen in the project already.
+
+Where things are:
+
+- `src/{{.Name}}/migrations/`: one module per migration, each with a
+  `version: N` that is unique and increasing.
+- `src/{{.Name}}/platform/database.gleam`: the list of migrations given to
+  `runner.run`. They run when the app starts, under `gleam dev`, in the
+  tests' `support.with_db`, and with `gleam run -m tasks/migrate`.
+- `src/{{.Name}}/features/<plural>/<singular>.gleam`: the record, its
+  validation, JSON codecs and Gloo table.
+- `src/{{.Name}}/features/<plural>/<plural>.gleam`: every query for it.
+  Controllers{{if not .API}} and pages{{end}} call these functions; they never query directly.
+
+## Rules
+
+- **Never edit a migration that may have run.** Applied versions are
+  skipped, not compared, so an edit silently does nothing on any database
+  that already has it. Change the schema with a new migration.
+- A new migration gets the next version: one above the highest `version:`
+  in `src/{{.Name}}/migrations/`. Keep the `version: N` label; `howdy create`
+  reads it.
+- Register it by importing it in `platform/database.gleam` and appending
+  `<module>.migration()` to the **end** of the list in `runner.run(db, [...])`.
+  Keep that shape: the generators edit it.
+- A migration's SQL is split on `;`, so do not put semicolons inside
+  strings in it.
+- Table and column names are not quoted. Do not use SQL keywords (`order`,
+  `user`, `group`, `key`, `limit` ...) as names.
+- For a whole new table with a record and operations, prefer
+  `howdy create repo` (or `controller`{{if not .API}}, `pages`{{end}}) to writing it by hand.
+
+## Adding a column to an existing record
+
+Example: add `email:string` to `users`. Every step is needed; the compiler
+finds most misses, so run `gleam build` as you go.
+
+1. **Migration**: `src/{{.Name}}/migrations/add_email_to_users.gleam`:
+
+   ```gleam
+   import gloo/migration
+   import gloo/{{if eq .Database "postgres"}}pg{{else}}sqlite{{end}}
+
+   pub fn migration() -> migration.Migration {
+     migration.add_column(
+       version: 4,
+       name: "add_email_to_users",
+       table: "users",
+       column: {{if eq .Database "postgres"}}pg.column("email", pg.Text) |> pg.not_null |> pg.default("''"){{else}}sqlite.column("email", sqlite.Text) |> sqlite.not_null |> sqlite.default("''"){{end}},
+     )
+   }
+   ```
+
+   Existing rows need a value, so a `not_null` column needs a `default`
+   (raw SQL: `"''"`, `"0"`{{if eq .Database "postgres"}}, `"false"`{{end}}), or leave it nullable.
+{{- if ne .Database "postgres"}}
+   SQLite cannot add a `UNIQUE` column: add the column, then a unique
+   index in a second migration (see reference.md).
+{{- end}}
+2. **Register** it at the end of the list in `platform/database.gleam`.
+3. **Record** (`user.gleam`):
+   - add `email: String` to `User`, `UserInput` and `NewUser`;
+   - `validate`: `use email <- validate.field("email", input.email, [validate.trim(), validate.email()])`
+     and pass `email:` to `NewUser(...)`;
+   - `values`: `#("email", sql.string(input.email))`;
+   - `input_decoder` and `decoder` (JSON): `use email <- decode.field("email", decode.string)`;
+     use `decode.optional_field` if existing clients will not send it;
+   - `table()`'s row decoder reads columns **by position**: add
+     `use email <- decode.field(N, decode.string)` with N the next index,
+     since a new column is added at the end of the table;
+   - `columns`: append `"email"`, in the same order as the row decoder;
+   - `to_json`: `#("email", json.string(item.email))`.
+4. **Operations** (`users.gleam`): nothing for create, update, find and
+   delete, which use `values`, `columns` and `table()`. Add new queries here.
+{{- if not .API}}
+5. **Pages**, if the feature has them: in `pages/helpers.gleam`, read it in
+   `parse` (`pages.value(form, "email")`; `pages.whole_number` for an int,
+   `pages.number` for a float, `pages.checked` for a bool), add it to
+   `to_form` and to `fields` (`pages.field(form, errors, "email", "Email", [a.type_("email")])`);
+   add a column to `index_page.gleam` and a row to `show_page.gleam`.
+6. **Tests**: add the field wherever the tests build a `UserInput(...)` or
+   JSON body, and assert on it. Search for `UserInput(` and `User(` across
+   `src/` and `test/`.
+{{- else}}
+5. **Tests**: add the field wherever the tests build a `UserInput(...)` or
+   JSON body, and assert on it. Search for `UserInput(` and `User(` across
+   `src/` and `test/`.
+{{- end}}
+
+Then `howdy check`. Renaming or dropping a column is the same walk in
+reverse, with `migration.rename_column` or `migration.drop_column`.
+
+## Writing a query
+
+Put it in the operations module and return `service.Result`, mapping
+database errors with `errors.from_db` (no row becomes 404, a constraint
+violation 409):
+
+```gleam
+pub fn find_by_email(db: Repo, email: String) -> service.Result(User) {
+  query.from(user.table())
+  |> query.where(query.Eq("email", sql.string(email)))
+  |> repo.query_one(db, _)
+  |> result.map_error(errors.from_db)
+}
+
+pub fn recent(db: Repo, limit: Int) -> service.Result(List(User)) {
+  query.from(user.table())
+  |> query.order_by("id", query.Desc)
+  |> query.limit(limit)
+  |> repo.query_all(db, _)
+  |> result.map_error(errors.from_db)
+}
+```
+
+The query builder does `SELECT *` with `where` (`Eq`, `Neq`, `Gt`, `Gte`,
+`Lt`, `Lte`, `In`, `Like`, `IsNull`, `IsNotNull`, `And`, `Or`, `Not`),
+`order_by`, `limit` and `offset`. For counts, joins, grouping or picking
+columns, write SQL with `gloo/sql`; see reference.md. Test every new query
+against a real database with `support.with_db`.

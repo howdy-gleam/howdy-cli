@@ -66,7 +66,7 @@ func (p *Project) Files() ([]File, error) {
 	}
 	files := make([]File, 0, len(byPath))
 	for _, f := range byPath {
-		if p.API && uiOnly(f.Path, p.Name) {
+		if p.API && uiOnly(f.Path, p.Name) || p.NoAgents && forAgents(f.Path) {
 			continue
 		}
 		files = append(files, f)
@@ -103,16 +103,23 @@ func flag(on bool) string {
 
 // uiOnly reports whether a project file serves pages, and so is left out of
 // an API project: the site and its tests, layouts, the HTML 404 page,
-// static files and the stylesheet task.
+// static files, the stylesheet task and the agent skill for pages.
 func uiOnly(path, name string) bool {
 	for _, prefix := range []string{
 		"src/" + name + "/features/home/", "test/" + name + "/features/home/", "src/" + name + "/layouts/", "priv/",
+		".claude/skills/howdy-pages/",
 	} {
 		if strings.HasPrefix(path, prefix) {
 			return true
 		}
 	}
 	return path == "src/"+name+"/platform/not_found.gleam" || path == "src/tasks/css.gleam"
+}
+
+// forAgents reports whether a project file is there for coding agents,
+// and so is left out with --no-agents.
+func forAgents(path string) bool {
+	return path == "AGENTS.md" || path == "CLAUDE.md" || strings.HasPrefix(path, ".claude/skills/")
 }
 
 // render every template under root into byPath, replacing earlier entries

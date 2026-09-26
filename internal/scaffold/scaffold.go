@@ -32,6 +32,9 @@ type Project struct {
 	// the project is a JSON backend, with a health check in place of the
 	// home page.
 	API bool
+	// NoAgents leaves out the files for coding agents: AGENTS.md,
+	// CLAUDE.md and the skills in .claude/skills/.
+	NoAgents bool
 
 	arg string
 }

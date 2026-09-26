@@ -1,0 +1,138 @@
+---
+name: howdy-controllers
+description: Write or change Howdy routes and handlers - controllers, path and query parameters, JSON and form bodies, headers and cookies, responses, service errors and status codes, redirects and middleware. Use when adding or editing an endpoint or anything under a *_controller.gleam file.
+---
+
+# Controllers, requests and responses
+
+Howdy {{.Release}}. Read an existing controller in `src/{{.Name}}/features/`
+first and follow it.
+
+## A controller
+
+```gleam
+import howdy/controller
+import howdy/param
+import howdy/service
+
+pub fn controller(db: Repo) {
+  controller.new("api/notes")            // prefix; "" for the site root
+  |> controller.get("/", fn(ctx) { ... }) // GET /api/notes
+  |> controller.get("/search", search)   // fixed paths before /:id
+  |> controller.get("/:id", fn(ctx) {
+    use id <- param.int(ctx, "id")       // 400 if missing or not an int
+    notes.find(db, id) |> service.respond(ctx, note.to_json)
+  })
+  |> controller.post("/", create(db, _))
+}
+```
+
+- Methods: `controller.get`, `post`, `put`, `patch`, `delete`, or
+  `controller.route(c, http.Head, path, handler)` for any other. GET also
+  answers HEAD, and OPTIONS is answered for you.
+- Paths: `:name` captures a segment; a final `*rest` captures the rest.
+  Among routes without `*`, the first declared wins, so `/new` must come
+  before `/:id`.
+- Register it in `app` in `src/{{.Name}}.gleam`:
+  `|> howdy.controller(notes_controller.controller(db))`. Pass it what it
+  needs from the `Services` record{{if .Database}} (`db`, and whatever `howdy add` put there){{end}} as arguments.
+- A handler is `fn(ctx) -> Response(Content)`. `ctx.request` is the
+  `gleam/http` request, `ctx.params` the path parameters.
+- Helpers that take a context should accept any guard:
+  `fn show(ctx: controller.GuardedContext(guarded), ...)`.
+
+## Reading the request
+
+All of these are written for `use`, and answer the request themselves
+(400, 415 or 422 JSON) when the input is bad:
+
+```gleam
+use id <- param.int(ctx, "id")                    // howdy/param: int, string
+use page <- query.int_or(ctx, "page", default: 1) // howdy/query
+use term <- query.optional_string(ctx, "q")       // Option(String)
+use input <- body.validated(ctx, note.input_decoder(), note.validate) // howdy/body: 400 bad JSON, 422 invalid
+use data <- body.json(ctx, decoder)               // decode only
+use theme <- cookie.string_or(ctx, "theme", default: "system") // howdy/cookie
+```
+
+- `howdy/query` also has `string`, `int`, `bool` (only `true`/`false`),
+  their `optional_` and `_or` forms, and `strings` for repeated keys.
+- Headers: `request.get_header(ctx.request, "x-api-key")` from
+  `gleam/http/request`.
+- Form posts: `howdy/form` (`use fields <- form.read(ctx)`, then
+  `form.string(fields, "name", rules, next)`){{if not .API}}, or the project's own
+  `pages.read_form` if `platform/pages.gleam` exists{{end}}. Do not name a variable
+  `form`: it hides the module.
+
+## Validation (`howdy/validate`)
+
+```gleam
+pub fn validate(input: NoteInput) -> validate.Result(NewNote) {
+  use body <- validate.field("body", input.body, [validate.trim(), validate.not_empty(), validate.max_length(500)])
+  use rating <- validate.field("rating", input.rating, [validate.min(1), validate.max(5)])
+  validate.ok(NewNote(body:, rating:))
+}
+```
+
+Rules: `trim` (first, it normalises), `not_empty`, `min_length`,
+`max_length`, `email`, `min`, `max`, `one_of(allowed, show)`,
+`custom(check, message)`. Every field is checked and all errors are
+returned together; a JSON client gets 422
+`{"error":"validation failed","fields":[{"field":...,"message":...}]}`.
+
+## Responding
+
+Operations return `service.Result(a)`; pipe the result into a responder:
+
+```gleam
+notes.all(db) |> service.respond(ctx, json.array(_, note.to_json)) // 200
+notes.create(db, input) |> service.created(ctx, note.to_json)      // 201
+notes.delete(db, id) |> service.no_content(ctx)                    // 204
+service.error_response(ctx, service.NotFound("no such note"))
+```
+
+| `service.Error` | Status |
+| --- | --- |
+| `Invalid(msg)` | 400 |
+| `Unauthorized` | 401 |
+| `Forbidden` | 403 |
+| `NotFound(msg)` | 404 |
+| `Conflict(msg)` | 409 |
+| `UnsupportedMediaType(msg)` | 415 |
+| `Validation(List(FieldError))` | 422 |
+| `TooManyRequests(retry_after_seconds:)` | 429 |
+| `Internal(msg)` | 500; logged, the client sees only "internal server error" |
+
+Error bodies are always `{"error": "..."}`. Other responses:
+`controller.json(ctx, json)`, `controller.text`, `controller.html`,
+`controller.status(ctx, 204)`, and `|> controller.with_status(422)` on any
+response. There is no redirect helper in core:
+`controller.status(ctx, 303) |> response.set_header("location", "/notes")`{{if not .API}},
+or `pages.redirect(ctx, to: path)` where `platform/pages.gleam` exists{{end}}.
+Cookies: `cookie.set(res, name, value, cookie.defaults())`, `cookie.delete`.
+
+## Middleware
+
+```gleam
+pub fn require_api_key(ctx: controller.Context, next: controller.Next) {
+  case request.get_header(ctx.request, "x-api-key") {
+    Ok("secret") -> next(ctx)
+    _ -> service.error_response(ctx, service.Unauthorized)
+  }
+}
+```
+
+Apply it to the app (`|> howdy.middleware(m)` in `src/{{.Name}}.gleam`), to a
+controller (`|> controller.middleware(m)`, which covers every route), or to
+one route (`controller.post("/", create |> middleware.wrap(m))` with
+`howdy/middleware`).
+{{- if not .API}} `src/{{.Name}}/platform/not_found.gleam` is a worked example.{{end}}
+
+## Mistakes to avoid
+
+- A new controller that is not registered in `app` serves nothing.
+- `service.respond(ctx, ...)` is wrong: the result comes first, piped in.
+- Never write on GET{{if not .API}}; HTML forms can only GET and POST, so updates
+  and deletes from pages are POSTs (`/notes/:id`, `/notes/:id/delete`){{end}}.
+- Database calls belong in the feature's operations module, not in the
+  handler.

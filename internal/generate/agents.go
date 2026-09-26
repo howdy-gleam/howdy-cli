@@ -1,11 +1,13 @@
 package generate
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"text/template"
 )
 
 // AgentsFile is the guide for coding agents that 'howdy new' writes, and
@@ -25,6 +27,8 @@ Emails live in ` + "`src/%[1]s/emails/`" + `, written with smail; add one with
 tests. Under ` + "`gleam dev`" + ` sent email goes to an outbox in ` + "`tmp/mail`" + `.
 `,
 	"auth": `## Sign-in
+
+See ` + "`.claude/skills/howdy-auth/SKILL.md`" + ` for guards, roles and tests.
 
 Howdy Auth is installed, with the app's identity and permissions built in
 ` + "`src/%[1]s/platform/accounts.gleam`" + ` and kept in ` + "`Services`" + `. Pass
@@ -56,29 +60,63 @@ Howdy Remote is installed. The procedures the app serves are defined in
 `,
 }
 
-// NoteForAgents appends the section about pkg to the project's AGENTS.md,
-// so agents working on it know the package is there and how to use it. It
-// reports whether the file changed: a project without AGENTS.md, made
-// before 'howdy new' wrote one, or one that has the section already, is
-// left alone.
-func (p *Project) NoteForAgents(pkg string) (bool, error) {
+// agentSkills are the skills 'howdy add' writes for coding agents, keyed
+// by package: a template, rendered with the project's Name and API, and
+// the skill's name, a folder under .claude/skills/.
+var agentSkills = map[string][2]string{
+	"auth": {"skill_auth.md.tmpl", "howdy-auth"},
+}
+
+// NoteForAgents tells coding agents working on the project about pkg: it
+// appends the package's section to AGENTS.md and writes its skill, if it
+// has one. It returns the paths it changed. A project without AGENTS.md,
+// made before 'howdy new' wrote one, is left alone, and so is one that
+// has the section already; an existing skill is not replaced.
+func (p *Project) NoteForAgents(pkg string) ([]string, error) {
 	note, ok := agentNotes[pkg]
 	if !ok {
-		return false, fmt.Errorf("no agent notes for %q", pkg)
+		return nil, fmt.Errorf("no agent notes for %q", pkg)
 	}
 	path := filepath.Join(p.Dir, AgentsFile)
 	src, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
-		return false, nil
+		return nil, nil
 	}
 	if err != nil {
-		return false, err
+		return nil, err
 	}
+	var changed []string
 	marker := "<!-- howdy add " + pkg + " -->"
-	text := string(src)
-	if strings.Contains(text, marker) {
-		return false, nil
+	if text := string(src); !strings.Contains(text, marker) {
+		text = strings.TrimRight(text, "\n") + "\n\n" + marker + "\n" + fmt.Sprintf(note, p.Name)
+		if err := os.WriteFile(path, []byte(text), 0o644); err != nil {
+			return nil, err
+		}
+		changed = append(changed, AgentsFile)
 	}
-	text = strings.TrimRight(text, "\n") + "\n\n" + marker + "\n" + fmt.Sprintf(note, p.Name)
-	return true, os.WriteFile(path, []byte(text), 0o644)
+	if skill, ok := agentSkills[pkg]; ok {
+		content, err := renderSkill(skill[0], p)
+		if err != nil {
+			return changed, err
+		}
+		file := filepath.Join(".claude", "skills", skill[1], "SKILL.md")
+		written, err := writeFiles(p.Dir, []File{{Path: file, Content: content, Shared: true}})
+		for _, w := range written {
+			changed = append(changed, filepath.ToSlash(w))
+		}
+		if err != nil {
+			return changed, err
+		}
+	}
+	return changed, nil
+}
+
+func renderSkill(name string, p *Project) ([]byte, error) {
+	tmpl, err := template.New(name).Option("missingkey=error").ParseFS(templates, "templates/"+name)
+	if err != nil {
+		return nil, err
+	}
+	var out bytes.Buffer
+	err = tmpl.Execute(&out, map[string]any{"Name": p.Name, "API": p.API})
+	return out.Bytes(), err
 }

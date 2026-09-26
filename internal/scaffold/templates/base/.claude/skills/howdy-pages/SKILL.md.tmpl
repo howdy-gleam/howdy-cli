@@ -1,0 +1,134 @@
+---
+name: howdy-pages
+description: Build or change HTML pages in this Howdy app with Howdy UI and Lustre - page layout, components, forms that post and show validation errors, live pages and components that update over a WebSocket, themes and CSS. Use for any page, form, layout, component, live view or styling work.
+---
+
+# Pages
+
+Pages are rendered on the server from Howdy UI components (`howdy/ui`),
+which are Lustre elements. The full component list, with signatures, is in
+[components.md](components.md); check a component's arguments there before
+using it, since they vary.
+
+## A page
+
+```gleam
+import howdy/controller.{type GuardedContext}
+import howdy/ui
+import howdy/ui/button
+import lustre/element.{text}
+import {{.Name}}/layouts/default_layout
+
+pub fn show(ctx: GuardedContext(guarded), notes: List(Note)) {
+  default_layout.render(ctx, "Notes", [
+    ui.h1("Notes"),
+    ui.p([text("Everything you wrote down.")]),
+    ui.stack([], list.map(notes, note_card)),
+  ])
+}
+```
+
+- Start new pages with `howdy create page <feature> <page>`: it writes the
+  page, its route and a test. Pass data as extra parameters and call it
+  from the route: `controller.get("/", fn(ctx) { index_page.show(ctx, items) })`.
+- The layout (`src/{{.Name}}/layouts/`) supplies the document, theme,
+  stylesheets and header; `render(ctx, title, content)` sets the `<title>`,
+  and the page adds its own `ui.h1`. `howdy create layout <name>` makes
+  another.
+- Set a status with `|> controller.with_status(404)`.
+- `text(...)` and attribute values are escaped. Never build HTML strings.
+
+## Components: what trips people up
+
+- Arities differ. `ui.h1("Title")` to `ui.h4` and `ui.muted("...")` take a
+  String. `ui.p(children)`, `ui.link(href, children)`, `ui.card_title(children)`
+  take no attributes. Most others are `(attributes, children)`, some with a
+  variant first: `ui.button(button.Primary, [], [text("Save")])`.
+- Variants live in the component's module: `import howdy/ui/button`, then
+  `button.Primary | Secondary | Outline | Ghost | Link | Danger`.
+- `ui.button` is always `type="button"` and never submits. Use
+  `ui.submit_button(button.Primary, [], [text("Save")])` in a form.
+- Dialog, popover, menu and tooltip triggers return a list of attributes:
+  `ui.button(button.Outline, ui.dialog_trigger("rename"), [text("Rename")])`.
+- Mix in plain Lustre freely (`lustre/element/html as h`,
+  `lustre/attribute as a`, `lustre/event`) for anything without a component.
+
+## Forms
+
+Plain HTML forms that work without JavaScript. Once `howdy create pages`
+has run, `src/{{.Name}}/platform/pages.gleam` has the helpers
+(`read_form`, `field`, `checkbox`, `submit`, `redirect`, `action`,
+`error`); use them, and look at the generated `pages/` of that feature as
+the model. Without it, build the form from `ui.label`, `ui.input`,
+`ui.textarea`, `ui.checkbox`, `ui.native_select` and `ui.field_error`, and
+read it with `howdy/form`.
+
+The flow, from a generated controller:
+
+```gleam
+|> controller.post("/", fn(ctx) {
+  use form <- pages.read_form(ctx)
+  case helpers.parse(form) {
+    Error(errors) ->
+      new_page.show(ctx, form, errors) |> controller.with_status(422)
+    Ok(input) ->
+      case notes.create(db, input) {
+        Ok(item) -> pages.redirect(ctx, to: helpers.path(item))  // 303
+        Error(error) -> pages.error(ctx, error)
+      }
+  }
+})
+```
+
+- On failure, render the same form again with 422, the submitted values
+  and the errors, which `pages.field` shows under each field.
+- On success, redirect (303) so a refresh does not post again.
+- Forms can only GET and POST: update is `POST /notes/:id`, delete is
+  `POST /notes/:id/delete` (`pages.action(button.Danger, to: path, label: "Delete")`).
+  Never change anything on GET.
+- Put `/new` before `/:id` in the controller.
+
+## Live pages and components
+
+A live view is a Lustre server component: its model, update and view run
+on the server, and the browser shows each change over a WebSocket. Use one
+for things that change while the page is open; use a plain page and a form
+otherwise.
+
+- `howdy create live_page <feature> <page>` or
+  `howdy create live_component [feature] <name>` writes it and routes its
+  socket. `src/{{.Name}}/features/home/components/` has a worked example
+  if the project was made with a database.
+- A page that shows one must render with `render_live`, not `render`, and
+  include `<name>_component.mount()` (or `live.mount("/socket/url")`).
+- Its app is `lustre.component(init, update, view, options)`. Pass the
+  database in by closing over it (`pub fn app(db: Repo)`), call the
+  feature's operations module from `update`, and keep errors in the model.
+- Events come from `lustre/event`: `event.on_click(Msg)`,
+  `event.on_input(fn(value) { Typed(value) })`, `event.on_check`,
+  `event.on_submit(fn(fields) { Submit })` (which prevents the default).
+- State lives per connection: it is lost on reload, so save anything that
+  matters to the database.
+- Tests cannot open the socket (it answers 426): test `update` and `view`
+  as plain functions.
+
+## Styling
+
+- Howdy UI's styles come from the theme. `priv/public/assets/ui.css` is
+  generated: run `gleam run -m tasks/css` after changing themes, and never
+  edit it by hand. Under `gleam dev` it is generated on request.
+- Your own CSS goes in `priv/public/assets/style.css`, loaded after it,
+  with plain kebab-case classes set by `a.class("note-card")`. Howdy UI's
+  own class names are hashed; do not target them.
+- Prefer layout components (`ui.container`, `ui.stack`, `ui.row`,
+  `ui.card`) over new CSS.
+- Themes: `howdy/ui/theme` and the presets in `howdy/ui/themes/`
+  (`zinc`, `stone`, `rose`, `green`, `violet`). A theme change must be made
+  in the layout, `src/tasks/css.gleam` and the dev stylesheet route
+  together.
+
+## Check
+
+`howdy check`, then look at the page under `gleam dev` at
+http://127.0.0.1:8787. Test pages by status and by text on the page (see
+the howdy-testing skill).

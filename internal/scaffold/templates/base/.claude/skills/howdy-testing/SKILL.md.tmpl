@@ -1,0 +1,128 @@
+---
+name: howdy-testing
+description: Write and fix tests for this Howdy app with howdy/testing and gleeunit - sending requests through the app without a server, checking JSON, HTML, status codes, headers and cookies{{if .Database}}, using a fresh database per test{{end}}. Use when adding tests, when a test fails, or after changing behaviour.
+---
+
+# Testing
+
+`gleam test` runs every **`pub`** function whose name ends in `_test` in
+any module under `test/`. A test fails when it panics. Tests mirror the
+code: the test for `src/{{.Name}}/features/notes/notes_controller.gleam`
+is `test/{{.Name}}/features/notes/notes_controller_test.gleam`.
+
+Run one quickly with `gleam test`, then the whole check with `howdy check`.
+
+## Shape of a test
+
+```gleam
+import gleam/http/response
+import gleam/string
+import howdy/testing
+import {{.Name}}/support
+
+pub fn lists_notes_test() {
+{{- if .Database}}
+  use db <- support.with_db()            // a fresh, migrated database for this test
+  let res = testing.get("/api/notes") |> testing.send(support.app(db))
+{{- else}}
+  let res = testing.get("/health") |> testing.send(support.app())
+{{- end}}
+  assert res.status == 200
+  assert response.get_header(res, "content-type")
+    == Ok("application/json; charset=utf-8")
+}
+```
+
+Assert with the `assert` keyword and `let assert` patterns, as the
+generated tests do, not gleeunit's `should`:
+
+```gleam
+let assert Ok(item) = testing.json(res, note.decoder())
+assert item.body == "Hello"
+let assert Ok([error]) = testing.field_errors(res)
+assert error.field == "body"
+```
+
+`test/{{.Name}}/support.gleam` builds the app with the services it gets at
+startup{{if .Database}}, and `support.with_db` gives each test its own {{if eq .Database "postgres"}}empty test database (`TEST_DATABASE_URL`; start PostgreSQL with `docker compose up -d`){{else}}in-memory SQLite
+database{{end}}. Add shared helpers there{{end}}.
+
+## howdy/testing
+
+Requests:
+
+| Function | Makes |
+| --- | --- |
+| `testing.get(path)`, `testing.delete(path)` | a request with no body; `"?a=b"` in the path is the query |
+| `testing.post(path, json)`, `put`, `patch` | a JSON request (`json.object([...])`) |
+| `testing.post_form(path, [#("name", "value")])` | a form post |
+| `testing.request(http.Put, path)` | any method, then add a body |
+| `\|> testing.form_body(pairs)`, `json_body(j)`, `text_body(s)`, `bytes_body(b)` | a body on a request |
+| `\|> testing.header(name, value)`, `query(pairs)`, `cookie(name, value)`, `from_ip(ip)` | headers and the rest |
+
+Send with `|> testing.send(app)`, then read the response:
+
+| Function | Gives |
+| --- | --- |
+| `res.status` | the status code |
+| `response.get_header(res, "location")` | a header (`gleam/http/response`) |
+| `testing.text(res)` | the body as a String |
+| `testing.json(res, decoder)` | the decoded JSON body |
+| `testing.error(res)` | the `"error"` message of an error response |
+| `testing.field_errors(res)` | the field errors of a 422 |
+| `testing.cookies(res)` | cookies set, as `#(name, value)` |
+
+There is no helper for a POST without a body (`testing.request(http.Post, path)`),
+for PUT or PATCH with a form (`testing.request(http.Put, path) |> testing.form_body(pairs)`)
+or for HTML: check it with `string.contains(testing.text(res), "...")`.
+
+## What to test
+
+- Each route's success case, with the status and the body.
+- Each validation rule: send a bad value, expect 422 and the field.
+- Missing records: 404. Guarded routes: 401 without credentials.
+{{- if .Database}}
+- Database operations directly, without HTTP: build input through the
+  record's `validate` (the only way to make a `NewX`), then call the
+  operations module:
+
+  ```gleam
+  pub fn finds_by_email_test() {
+    use db <- support.with_db()
+    let assert Ok(input) = user.validate(user.UserInput(name: "Ada", email: "ada@example.com"))
+    let assert Ok(created) = users.create(db, input)
+    assert users.find_by_email(db, "ada@example.com") == Ok(created)
+  }
+  ```
+{{- end}}
+{{- if not .API}}
+- Pages: status 200, `content-type` `text/html; charset=utf-8`, and text
+  that should be on the page. A form post that succeeds answers 303 with a
+  `location` header; one that fails validation answers 422 and shows the
+  form again.
+- Live routes answer 426 without a WebSocket; test a live view's `update`
+  and `view` functions directly instead.
+{{- end}}
+
+## Guarded routes
+
+Once the project has auth (`howdy add auth`), the generators give
+`support.sign_in(db)`, which returns a session token. Call it **once per
+database** (a second call conflicts on the same email) and send it as a
+bearer token:
+
+```gleam
+let token = support.sign_in(db)
+let send = fn(req) {
+  req
+  |> testing.header("authorization", "Bearer " <> token)
+  |> testing.send(app)
+}
+```
+
+## When a test fails
+
+Read the assertion in the output: it shows both sides. `testing.text(res)`
+of a failing response usually says why (`{"error":...}`). A test that
+passes alone but fails with others is sharing state{{if .Database}}: give it its own
+`support.with_db`{{end}}.

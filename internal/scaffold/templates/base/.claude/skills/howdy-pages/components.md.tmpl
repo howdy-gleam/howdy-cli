@@ -1,0 +1,128 @@
+# Howdy UI components
+
+For Howdy UI {{.Release}}. Everything below is re-exported by `howdy/ui` unless its
+module is named. Variant types come from the component's module, such as
+`import howdy/ui/button` for `button.Primary`. `attrs` is a
+`List(Attribute(msg))` from `lustre/attribute`, appended after the
+component's own class; `children` is a `List(Element(msg))`.
+
+## Text
+
+| Call | Notes |
+| --- | --- |
+| `ui.h1(String)` ... `ui.h4(String)` | a String, no attributes |
+| `ui.p(children)` | no attributes |
+| `ui.muted(String)` | secondary text |
+| `ui.link(href, children)` | no attributes |
+| `ui.prose(attrs, children)` | long-form text, such as rendered Markdown |
+| `ui.kbd(key)`, `ui.shortcut(keys)` | keyboard keys |
+
+## Layout
+
+| Call | Notes |
+| --- | --- |
+| `ui.container(attrs, children)` | centred column with a maximum width |
+| `ui.stack(attrs, children)` | vertical, with a gap |
+| `ui.row(attrs, children)` | horizontal, wrapping |
+| `ui.separator(layout.Horizontal \| layout.Vertical, attrs)` | `howdy/ui/layout` |
+| `ui.aspect_ratio(width, height, attrs, children)` | |
+| `ui.scroll_area(label, attrs, children)` | |
+| `ui.sidebar_layout(collapsed:, attributes:, sidebar:, main:)` | with `ui.sidebar(id, attrs, children)`, `sidebar_header(children)`, `sidebar_content(children)`, `sidebar_footer(children)`, `sidebar_group(label, items)`, `sidebar_link(href, active:, attributes:, children:)`, `sidebar_trigger(id)` |
+
+## Buttons
+
+| Call | Notes |
+| --- | --- |
+| `ui.button(variant, attrs, children)` | `type="button"`: never submits |
+| `ui.submit_button(variant, attrs, children)` | submits its form |
+| `ui.sized_button(variant, size, attrs, children)` | sizes: `button.ExtraSmall \| Small \| Medium \| Large \| Icon \| IconSmall ...` |
+| `ui.button_group(button_group.Horizontal \| Vertical, attrs, children)` | |
+| `ui.toggle(pressed, attrs, children)` | |
+| `ui.theme_toggle(children, from: "light", to: "dark")` | |
+
+Variants: `button.Primary | Secondary | Outline | Ghost | Link | Danger`.
+A link that looks like a button: `h.a([a.href(url), ui.class(button.button_class(button.Outline))], [text("Edit")])`.
+
+## Forms
+
+| Call | Notes |
+| --- | --- |
+| `ui.label(attrs, children)` | pair with `a.for("id")` |
+| `ui.input(attrs)` | pass `a.type_`, `a.name`, `a.id`, `a.value` |
+| `ui.textarea(attrs, content)` | |
+| `ui.checkbox(attrs)`, `ui.radio(attrs)`, `ui.switch(attrs)`, `ui.slider(attrs)` | |
+| `ui.choice(control, children)` | a label around a checkbox or radio |
+| `ui.radio_group(attrs, children)` | |
+| `ui.native_select(attrs, children)` | children are `h.option` |
+| `ui.select(id:, name:, value:, placeholder:, attributes:, items:)` | items from `ui.select_item(value, label)`, `ui.select_group(label, items)`; submits through a hidden input named `name` |
+| `ui.combobox(id:, name:, value:, label:, placeholder:, search:, attributes:, options:)` | |
+| `ui.field(attrs, children)` | wraps a label, control, description and error |
+| `ui.field_description(attrs, children)`, `ui.field_error(attrs, children)` | mark the control `a.aria_invalid("true")` and point `a.aria_describedby` at the error |
+| `ui.fieldset(attrs, legend: [...], children: [...])` | |
+| `ui.input_group(attrs, children)`, `ui.input_group_input(attrs)`, `ui.input_group_addon(children)` | |
+
+## Tables
+
+`ui.table(attrs, children)` with `ui.table_header`, `table_body`,
+`table_footer`, `table_row`, `table_head` (th), `table_cell` (td) and
+`table_caption`, each `(attrs, children)`. For sorting and selection,
+`howdy/ui/data_table`.
+
+## Cards, alerts, badges and status
+
+| Call | Notes |
+| --- | --- |
+| `ui.card(attrs, children)` | with `ui.card_header(attrs, children)`, `ui.card_title(children)`, `ui.card_description(children)`, `ui.card_action(attrs, children)`, `ui.card_content(attrs, children)`, `ui.card_footer(attrs, children)` |
+| `ui.alert(alert.Info \| alert.Danger, attrs, children)` | with `ui.alert_title(children)`, `ui.alert_description(children)`; add `a.role("alert")` when it reports something the user did |
+| `ui.badge(badge.Primary \| Secondary \| Outline \| Danger, attrs, children)` | |
+| `ui.empty(icon:, title:, description:, actions:)` | an empty state |
+| `ui.progress(label:, value:, max:)`, `ui.progress_indeterminate(label:)` | |
+| `ui.spinner(label, attrs)`, `ui.skeleton(attrs)` | |
+| `ui.toast_region(attrs, toasts)`, `ui.toast(toast.Info \| Success \| Danger \| Loading, attrs, children)` | |
+| `ui.avatar(src:, alt:, initials:)` | |
+
+## Overlays
+
+A trigger returns a `List(Attribute)`: pass it as a button's attributes.
+The trigger and its target must be in the same page (or the same live view).
+
+| Call | Trigger |
+| --- | --- |
+| `ui.dialog(id, attrs, children)`, `ui.alert_dialog(id, attrs, children)` | `ui.dialog_trigger(id)`; close with `ui.dialog_close(id)`; parts `dialog_header(children)`, `dialog_title(id, children)`, `dialog_description(id, children)`, `dialog_footer(children)` |
+| `ui.sheet(id, dialog.Right, attrs, children)` | `ui.dialog_trigger(id)` |
+| `ui.drawer(id, attrs, children)` | `ui.drawer_trigger(id)` |
+| `ui.popover(id, attrs, children)` | `ui.popover_trigger(id)` |
+| `ui.tooltip(id, children)` | `ui.tooltip_trigger(id)` |
+| `ui.menu(id, attrs, children)` | `ui.menu_trigger(id)`; items `menu_item(attrs, children)`, `menu_link(href, attrs, children)`, `menu_label(children)`, `menu_separator()` |
+| `ui.command(id, placeholder:, attributes:, children:)` | a searchable list; `command_item`, `command_link`, `command_group(heading, items)` |
+
+## Navigation
+
+| Call | Notes |
+| --- | --- |
+| `ui.tabs(id, selected:, attributes:, tabs:)` | tabs from `ui.tab(value, attrs, label:, panel:)` |
+| `ui.accordion(attrs, children)`, `ui.accordion_item(group, open:, summary:, content:)` | |
+| `ui.collapsible(attrs, open:, summary:, content:)` | |
+| `ui.breadcrumb(attrs, items)` | `breadcrumb_link(href, children)`, `breadcrumb_page(children)` |
+| `ui.pagination(current, total, href)` | `href: fn(Int) -> String` |
+| `ui.navigation_menu(attrs, items)`, `ui.navigation_link(href, active:, children:)` | |
+
+## Charts and dates
+
+`howdy/ui/chart` (`bar`, `line`, `area`, `pie`, `donut`, `radial`, `radar`,
+`view`) and `howdy/ui/calendar` are not re-exported: import them.
+
+## Styles
+
+`ui.class(sketch_class)` turns a Sketch class into an attribute; each
+component module has `*_class()` functions, such as
+`button.button_class(button.Primary)` or `typography.link_class()`, to
+style a raw element like the component. For your own styles prefer
+`a.class("name")` and `priv/public/assets/style.css`.
+
+## Live (`howdy/ui/live`)
+
+`live.mount(url)` puts a live view on a page; `live.serve(ctx, app, with: args)`
+answers its socket route. `live.on_value(name, Msg)` on a wrapping element
+reports the value of a `ui.select`, combobox or calendar inside a live
+view.

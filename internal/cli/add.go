@@ -2,6 +2,8 @@ package cli
 
 import (
 	"fmt"
+	"slices"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -681,25 +683,28 @@ func runAddMail(out *output, skipDeps bool) error {
 	return out.done("howdy add mail", "mail", commands, notes, manual)
 }
 
-// noteForAgents is the step that adds a section on each package to the
-// project's AGENTS.md, so coding agents working on it know how to use them.
+// noteForAgents is the step that tells coding agents working on the
+// project about each package: a section in AGENTS.md, and a skill for
+// packages that have one.
 func noteForAgents(project *generate.Project, pkgs ...string) tui.Step {
 	return tui.Step{
 		Title: "Noting it for coding agents",
 		Run: func(r tui.Reporter) (string, error) {
-			changed := false
+			var changed []string
 			for _, pkg := range pkgs {
-				ok, err := project.NoteForAgents(pkg)
+				paths, err := project.NoteForAgents(pkg)
+				changed = append(changed, paths...)
 				if err != nil {
 					return "", err
 				}
-				changed = changed || ok
 			}
-			if !changed {
+			if len(changed) == 0 {
 				return "no AGENTS.md to add to", nil
 			}
-			r.Log(generate.AgentsFile)
-			return generate.AgentsFile, nil
+			for _, path := range changed {
+				r.Log(path)
+			}
+			return strings.Join(slices.Compact(changed), ", "), nil
 		},
 	}
 }

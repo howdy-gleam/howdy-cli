@@ -1,0 +1,149 @@
+# Gloo and howdy/database reference
+
+For the versions this project uses (Gloo 1.x, Howdy {{.Release}}). Signatures are
+from the source; arguments are labelled as shown.
+
+## Migrations (`gloo/migration`)
+
+```gleam
+migration.create_table(version: v, name: n, table: t, columns: [Column, ...])
+migration.drop_table(version: v, name: n, table: t)
+migration.rename_table(version: v, name: n, from: a, to: b)
+migration.add_column(version: v, name: n, table: t, column: Column)
+migration.drop_column(version: v, name: n, table: t, column_name: c)
+migration.rename_column(version: v, name: n, table: t, from: a, to: b)
+migration.create_index(version: v, name: n, index: i, table: t, columns: ["a", "b"])
+migration.drop_index(version: v, name: n, index: i)
+migration.new(version: v, name: n, up: "RAW SQL")                  // anything else
+migration.execute_sql(version: v, name: n, up: "...", down: "...")
+{{- if eq .Database "postgres"}}
+migration.change_column(version: v, name: n, table: t, column_name: c, new_type: "BIGINT")
+migration.add_constraint(version: v, name: n, table: t, constraint: c, definition: "CHECK (price >= 0)")
+migration.drop_constraint(version: v, name: n, table: t, constraint: c)
+{{- end}}
+```
+
+`name` should match the module name. Only `up` runs in this project; there
+is no command to roll back, so undo a mistake with a new migration.
+{{- if eq .Database "postgres"}}
+
+### Columns (`gloo/pg`)
+
+```gleam
+pg.column("name", pg.Text) |> pg.not_null
+pg.column("id", pg.BigSerial) |> pg.primary_key
+pg.column("slug", pg.VarChar(80)) |> pg.not_null |> pg.unique
+pg.column("price", pg.Numeric(precision: 10, scale: 2)) |> pg.default("0")
+```
+
+Types: `Text`, `VarChar(Int)`, `Integer`, `BigInt`, `SmallInt`, `Boolean`,
+`Timestamp`, `TimestampTz`, `Date`, `Time`, `Uuid`, `Numeric(precision:, scale:)`,
+`JsonB`, `ByteA`, `Serial`, `BigSerial`, `Real`, `DoublePrecision`. The
+generators use `Text`, `BigInt`, `DoublePrecision` and `Boolean`, with
+`BigSerial` ids.
+{{- else}}
+
+### Columns (`gloo/sqlite`)
+
+```gleam
+sqlite.column("name", sqlite.Text) |> sqlite.not_null
+sqlite.column("id", sqlite.Integer) |> sqlite.primary_key
+sqlite.column("price", sqlite.Real) |> sqlite.default("0")
+```
+
+Types: `Integer`, `Text`, `Real`, `Blob`. SQLite has no boolean: the
+generators store a bool as `Integer` and read it with
+`decode.int |> decode.map(fn(n) { n != 0 })`.
+
+SQLite's `ALTER TABLE` is limited: an added `not_null` column needs a
+constant default, and a `unique` or primary key column cannot be added.
+To change a column's type, create a new table, copy the rows and rename it,
+with `migration.new` and raw SQL.
+{{- end}}
+
+Modifiers: `not_null`, `primary_key`, `unique`, `default(expr)` (raw SQL, so
+a string default is `"'text'"`). For a type or clause the helpers lack,
+give the raw type: `migration.column("user_id", "INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE")`.
+
+Unique index (the index helper only makes plain ones):
+
+```gleam
+migration.new(version: 5, name: "index_users_email",
+  up: "CREATE UNIQUE INDEX users_email_index ON users (email)")
+```
+
+## Queries (`gloo/query`, run with `gloo/repo`)
+
+```gleam
+query.from(table) -> Query(t)                        // SELECT * FROM "table"
+query.where(q, condition)                            // several are ANDed
+query.order_by(q, "column", query.Asc | query.Desc)
+query.limit(q, n)
+query.offset(q, n)
+query.update(q, [#("column", value), ...])           // then where
+query.delete(q)                                      // then where
+query.insert(query.from(t), t, [#("column", value), ...])
+```
+
+Conditions: `query.Eq(col, value)`, `Neq`, `Gt`, `Gte`, `Lt`, `Lte`,
+`In(col, [values])` (never with an empty list), `Like(col, "%pattern%")`,
+`IsNull(col)`, `IsNotNull(col)`, `And([...])`, `Or([...])`, `Not(c)`.
+
+Run: `repo.query_all(db, q)` (a list), `repo.query_one(db, q)` (exactly
+one: none is `NoResultError`), `repo.query_maybe_one(db, q)` (an `Option`),
+`repo.query_execute(db, q)` (rows changed). All return
+`Result(_, GlooError)`; map the error with `errors.from_db`.
+
+The table's row decoder reads columns by position, in table order, which
+is why `SELECT *` works. For writes that return the row, the generated
+code uses `database.returning(db, mutation, record.columns, or: service.NotFound("..."))`
+from `howdy/database`.
+
+## Values (`gloo/sql`, `gloo/value`)
+
+`sql.string(s)`, `sql.int(i)`, `sql.bool(b)`, `sql.nullable(sql.string, option)`,
+`sql.uuid(s)`{{if eq .Database "postgres"}}, `sql.time(t)`{{end}}; floats are `value.GFloat(f)` from
+`gloo/value`. There is no `sql.float`.
+
+## Raw SQL
+
+```gleam
+pub fn count_published(db: Repo) -> service.Result(Int) {
+  sql.query("SELECT COUNT(*) FROM posts WHERE published = $1")
+  |> sql.param(sql.bool(True))
+  |> sql.returns(decode.field(0, decode.int, decode.success))
+  |> repo.sql_one(db, _)
+  |> result.map_error(errors.from_db)
+}
+```
+
+Placeholders are `$1`, `$2` ... in order{{if ne .Database "postgres"}} (turned into `?` for SQLite, so
+use each once and in order){{end}}. `repo.sql_all`, `sql_one`, `sql_maybe_one`
+and `sql_execute` run it. Decode rows by position with `decode.field(i, ...)`.
+
+`howdy/database` has the same for code that works in `service.Result`:
+`database.query(db, sql, args, decoder)`, `database.one(db, sql, args, decoder, or: error)`,
+`database.execute(db, sql, args)`.
+
+## Transactions
+
+```gleam
+pub fn transfer(db: Repo, from: Int, to: Int, amount: Int) -> service.Result(Nil) {
+  use db <- database.transaction(db)    // howdy/database; an Error rolls back
+  use _ <- result.try(accounts.withdraw(db, from, amount))
+  accounts.deposit(db, to, amount)
+}
+```
+
+`database.transaction(repo, fn(Repo) -> service.Result(a)) -> service.Result(a)`
+commits on `Ok` and rolls back on `Error`. Use the `Repo` it gives you for
+every query inside.
+{{- if ne .Database "postgres"}} For SQLite, `database.write_transaction(repo, touching: "table", run: fn)`
+takes the write lock up front, avoiding busy errors when two requests write.{{end}}
+
+## Errors (`platform/errors.gleam`)
+
+`errors.from_db` turns `NoResultError` into `service.NotFound` (404),
+`ConstraintError` into `service.Conflict` (409), and anything else into
+`service.Internal` (500, logged). Catch a specific constraint, such as a
+duplicate email, before it becomes a 409 if you want a friendlier message.

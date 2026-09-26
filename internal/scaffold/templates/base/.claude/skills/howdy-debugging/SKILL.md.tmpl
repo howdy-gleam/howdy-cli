@@ -1,0 +1,100 @@
+---
+name: howdy-debugging
+description: Find out why this Howdy app misbehaves - build or test failures, a request answering the wrong status, a route not found, or a change that seems to have no effect. Covers howdy check, howdy routes, logging{{if .Full}}, the dev admin's traces, the console{{end}} and gleam dev's hot reload. Use when something is broken or behaves unexpectedly.
+---
+
+# Debugging
+
+## 1. Does it build and pass?
+
+```sh
+howdy check --json
+```
+
+Each check has a `status` and the `output` of the command. Fix the first
+compile error first: later ones often follow from it. The Gleam compiler's
+messages are precise; read the whole message, including the expected and
+found types. `howdy check --fix` settles formatting.
+
+**`gleam dev` keeps serving the old code when a build fails.** It prints
+`howdy_dev: build failed, still serving the previous code`{{if not .API}} and shows the
+error over the page in the browser{{end}}, but a request with curl still works,
+against the previous code. So a change that "has no effect" usually did
+not compile: run `howdy check`. Changes to `dev/`, `gleam.toml`, `.env` or
+dependencies need `gleam dev` restarted.
+
+## 2. Is the route what you think?
+
+```sh
+howdy routes
+```
+
+lists every route in the order it is matched, with the file and line that
+defines it. Common causes of a wrong answer:
+
+| Symptom | Likely cause |
+| --- | --- |
+| 404 for a route you wrote | its controller is not registered in `app` in `src/{{.Name}}.gleam` |
+| `/:id` handles `/new` | `/new` is declared after `/:id`; the first declared wins |
+| 400 "parameter id must be an integer" | `param.int` got a non-number, often a route clash as above |
+| 400 on a JSON POST | the body does not match the decoder (a missing or misnamed field) |
+| 422 | validation failed; the body lists the fields |
+| 401 | the route is guarded and the request has no session or bearer token |
+| 403 on a signed-in POST | cookie sessions need an `Origin` header matching `APP_ORIGIN` |
+{{- if not .API}}
+| 405 on a POST | no POST route has that path; the static files answer GET only |
+{{- end}}
+| 500 "internal server error" | a `service.Internal`; the real message is in the log |
+
+## 3. Look at the request
+
+Try it without a browser:
+
+```sh
+curl -i http://127.0.0.1:8787/api/notes
+curl -i -X POST http://127.0.0.1:8787/api/notes -H 'content-type: application/json' -d '{"body":"hi"}'
+```
+
+Or reproduce it in a test with `howdy/testing` (see the howdy-testing
+skill), which is faster and stays as a regression test.
+{{- if .Full}}
+
+Under `gleam dev` the admin at http://127.0.0.1:8787/_howdy records every
+request: **Telemetry** shows each as a trace with its{{if .Database}} SQL queries and{{end}}
+log lines, and points out failures; **Telemetry → Logs** holds the recent
+log lines.{{if .Database}} **Data** shows and edits the tables, to check what was
+actually stored.{{end}} With mail, auth or flags added, the admin has pages for
+those too.
+{{- end}}
+
+## 4. Log what you need
+
+```gleam
+import logging
+
+logging.log(logging.Info, "creating note for " <> user_id)
+```
+
+Levels run `Debug`, `Info`, `Notice`, `Warning`, `Error` and up; Debug is
+hidden unless you call `logging.set_level(logging.Debug)`. Every request is
+logged as `GET /path -> 200` by `howdy/logger`, and a `service.Internal`
+error is logged with its message. Remove temporary logging when done.
+{{- if .Full}}
+
+## 5. Poke at the running app
+
+The console runs Gleam inside the dev server, with the shortcuts in
+`src/console.gleam`:
+
+```sh
+gleam run -m gsh -- {{.Name}}_dev
+```
+
+```text
+gsh(1)> console.get("/api/notes")
+```
+
+`console.get` sends a plain GET with no credentials, so guarded routes
+answer 401 there. Add shortcuts for what you check often to
+`src/console.gleam`.
+{{- end}}

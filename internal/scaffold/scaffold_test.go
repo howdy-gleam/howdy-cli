@@ -464,7 +464,73 @@ func TestAgentGuide(t *testing.T) {
 				if strings.Contains(guide, "\n\n\n") || strings.Contains(guide, "<no value>") {
 					t.Errorf("AGENTS.md (%s) is badly rendered:\n%s", label, guide)
 				}
+
+				skills := map[string]bool{}
+				for path, content := range byPath {
+					dir, file, ok := strings.Cut(strings.TrimPrefix(path, ".claude/skills/"), "/")
+					if !strings.HasPrefix(path, ".claude/skills/") || !ok {
+						continue
+					}
+					if strings.Contains(content, "\n\n\n") || strings.Contains(content, "<no value>") {
+						t.Errorf("%s (%s) is badly rendered:\n%s", path, label, content)
+					}
+					if file != "SKILL.md" {
+						continue
+					}
+					skills[dir] = true
+					front, _, ok := strings.Cut(strings.TrimPrefix(content, "---\n"), "\n---\n")
+					if !strings.HasPrefix(content, "---\n") || !ok {
+						t.Errorf("%s (%s) has no frontmatter", path, label)
+						continue
+					}
+					if !strings.Contains(front, "\nname: "+dir+"\n") && !strings.HasPrefix(front, "name: "+dir+"\n") {
+						t.Errorf("%s (%s) should be named %s:\n%s", path, label, dir, front)
+					}
+					if !strings.Contains(front, "\ndescription: ") {
+						t.Errorf("%s (%s) has no description", path, label)
+					}
+					if !strings.Contains(guide, "`"+dir+"/SKILL.md`") {
+						t.Errorf("AGENTS.md (%s) should list the skill %s", label, dir)
+					}
+				}
+				want := []string{"howdy-feature", "howdy-controllers", "howdy-testing", "howdy-debugging"}
+				if db != NoDatabase {
+					want = append(want, "howdy-database")
+				}
+				if !api {
+					want = append(want, "howdy-pages")
+				}
+				if len(skills) != len(want) {
+					t.Errorf("skills (%s) = %v, want %v", label, skills, want)
+				}
+				for _, w := range want {
+					if !skills[w] {
+						t.Errorf("missing the skill %s (%s)", w, label)
+					}
+				}
 			}
+		}
+	}
+}
+
+func TestNoAgents(t *testing.T) {
+	for _, api := range []bool{false, true} {
+		p, err := New(filepath.Join(t.TempDir(), "demo_site"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		p.API, p.NoAgents = api, true
+		files, err := p.Files()
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, f := range files {
+			if forAgents(f.Path) || strings.HasPrefix(f.Path, ".claude/") {
+				t.Errorf("--no-agents (api %t) should leave out %s", api, f.Path)
+			}
+		}
+		if len(files) < 10 {
+			t.Errorf("--no-agents (api %t) should keep the rest of the project: %d files", api, len(files))
 		}
 	}
 }

@@ -1,0 +1,109 @@
+---
+name: howdy-auth
+description: Work with sign-in, the signed-in user, roles and permissions in this Howdy app (Howdy Auth) - guard controllers or single routes, read ctx.guard.user, require a role or permission, sign out, and test guarded routes. Use for anything about who may do what.
+---
+
+# Sign-in and permissions
+
+Howdy Auth is set up in `src/{{.Name}}/platform/accounts.gleam`:
+`identity` (sign-in by an emailed {{if .API}}code{{else}}link or code{{end}}, with registration open)
+and `permissions` (roles). Both are in the app's `Services` as
+`services.identity` and `services.permissions`.
+
+Auth mounts its JSON API at `/api/auth` (`/login`, `/register`, `/me`,
+`/logout`, sessions ...){{if not .API}} and its pages at `/auth/login`,
+`/auth/register` and `/auth/account`{{end}}. Leave those routes to it.
+
+## Guard a whole controller
+
+`howdy create controller|pages|page ... --add-auth` writes this for you:
+
+```gleam
+import howdy/auth.{type Auth}
+import howdy/controller
+
+pub fn controller(db: Repo, identity: Auth) {
+  controller.guarded("api/notes", auth.required(identity))
+  |> controller.get("/", fn(ctx) {
+    let user_id = ctx.guard.user.id           // a String
+    notes.for_user(db, user_id) |> service.respond(ctx, json.array(_, note.to_json))
+  })
+  |> controller.build                         // required at the end
+}
+```
+
+and it is registered with `howdy.controller(notes_controller.controller(db, services.identity))`.
+
+- `ctx.guard` is a `Principal(user:, session_id:, client:)`, and
+  `ctx.guard.user` a `User(id:, email:, group_id:, created_at:, updated_at:)`.
+  The id is a String. Keep anything else about a person (a name, a
+  profile) in your own table, keyed by that id.
+- A request needs either `Authorization: Bearer <token>` or the session
+  cookie; with neither it gets 401. With the cookie, a POST, PUT, PATCH or
+  DELETE also needs an `Origin` header matching `APP_ORIGIN`, or it gets 403.
+- Auth never redirects. {{if not .API}}A signed-out visitor to a guarded page gets a
+  401; to send them to `/auth/login` instead, add middleware that turns a
+  401 for a browser (an `Accept` header preferring HTML) into a 303, as
+  `platform/not_found.gleam` does for 404s. {{end}}Helpers used inside a guarded
+  controller should take `ctx: GuardedContext(guarded)`.
+
+## Guard one route
+
+```gleam
+import howdy/guard
+
+|> controller.get("/secret", fn(ctx) {
+  use principal <- guard.require(ctx, auth.required(identity))
+  ...
+})
+```
+
+## Roles and permissions
+
+Roles are named sets of permissions, assigned to users, checked in the
+guarded controller. Pass `services.permissions` to the controller (it is
+not passed by the generators), then:
+
+```gleam
+import howdy/authorization as access
+
+use _ <- guard.require(ctx, access.require_role(permissions, "editor", access.Global))
+use _ <- guard.require(ctx, access.require_permission(permissions, "notes.delete", access.Global))
+```
+
+Both answer 403 when the check fails and need a guarded context. To branch
+instead: `access.has_role(permissions, ctx.guard, "editor", access.Global)`
+and `access.allowed(permissions, ctx.guard, "notes.delete", access.Global)`,
+each a `service.Result(Bool)`.
+
+Define roles and grant them in code with
+`access.define_role(permissions, access.Global, "editor", ["notes.write", "notes.delete"], by: user.System)`
+and `access.assign(permissions, user_id, "editor", access.Global, by: user.System)`
+(`howdy/auth/user` for `user.System`), or in the dev admin under Roles.
+There is no built-in admin role and no wildcard.
+
+## Sign out
+
+`POST /api/auth/logout` with a JSON body `{}` and the session, or
+`auth.logout(identity, ctx.guard)` in code.
+
+## Test
+
+`support.sign_in(db)` makes a user and returns a session token. Call it
+once per test database, and send the token as a bearer header:
+
+```gleam
+pub fn lists_my_notes_test() {
+  use db <- support.with_db()
+  let app = support.app(db)
+  let token = support.sign_in(db)
+  let res =
+    testing.get("/api/notes")
+    |> testing.header("authorization", "Bearer " <> token)
+    |> testing.send(app)
+  assert res.status == 200
+}
+```
+
+Also test that the route answers 401 without the header. The signed-in
+test user is `someone@example.com`.

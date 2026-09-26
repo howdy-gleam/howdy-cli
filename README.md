@@ -42,8 +42,9 @@ Every project is also set up for development with the rest of Howdy:
 
 Pass `--minimal` to leave all three out.
 
-Every project also has an `AGENTS.md` for coding agents, with `CLAUDE.md`
-importing it: see [Working with coding agents](#working-with-coding-agents).
+Every project also has an `AGENTS.md` and skills for coding agents, with
+`CLAUDE.md` importing it, unless `--no-agents` is given: see
+[Working with coding agents](#working-with-coding-agents).
 
 Pass `--api-only` for a JSON backend with no pages: the project leaves out
 Howdy UI and Lustre, the home page, layouts, static files, the stylesheet
@@ -411,7 +412,28 @@ commands to use rather than writing code by hand, where things go, and the
 project's conventions. `CLAUDE.md` imports it for Claude Code. Each
 `howdy add` appends a short section on the package it installs, once, to
 an `AGENTS.md` that is there; a project made before the file existed is
-left alone.
+left alone, so `howdy add` never adds them to a project made with
+`--no-agents`.
+
+Projects also get task guides as Claude Code skills in `.claude/skills/`,
+which `AGENTS.md` lists so other agents can read them too:
+
+| Skill | For | In |
+| --- | --- | --- |
+| `howdy-feature` | building a feature end to end with the generators | every project |
+| `howdy-controllers` | routes, requests, responses, errors and middleware | every project |
+| `howdy-testing` | `howdy/testing` and what to test | every project |
+| `howdy-debugging` | `howdy check`, `howdy routes`, logs, the admin and console | every project |
+| `howdy-database` | migrations, adding a column, Gloo queries; with `reference.md` | projects with a database |
+| `howdy-pages` | Howdy UI, forms, live views, styles; with `components.md` | projects with pages |
+| `howdy-auth` | guards, the signed-in user, roles, tests | written by `howdy add auth` |
+
+They are templates in `internal/scaffold/templates/*/.claude/skills/` and
+`internal/generate/templates/skill_*.md.tmpl`, and describe the APIs of
+the release in `scaffold.Release`: update them with the templates.
+
+Pass `--no-agents` to `howdy new` to leave out `AGENTS.md`, `CLAUDE.md`
+and `.claude/skills/`.
 
 Every `new`, `create` and `add` command takes
 

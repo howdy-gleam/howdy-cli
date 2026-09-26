@@ -16,6 +16,25 @@ or static files.
 Its database is **{{if eq .Database "postgres"}}PostgreSQL{{else}}SQLite{{end}}**, used through Gloo{{if eq .Database "postgres"}} and pog{{end}}.
 {{- end}}
 
+## Task guides
+
+Step-by-step guides for common tasks, with the Howdy APIs they need, are
+in `.claude/skills/` (Claude Code loads them as skills). Read the one for
+your task before starting:
+
+| Guide | For |
+| --- | --- |
+| `howdy-feature/SKILL.md` | building a new feature end to end |
+| `howdy-controllers/SKILL.md` | routes, requests, responses, errors, middleware |
+{{- if .Database}}
+| `howdy-database/SKILL.md` | schema changes, migrations and queries |
+{{- end}}
+{{- if not .API}}
+| `howdy-pages/SKILL.md` | pages, Howdy UI, forms, live views, styles |
+{{- end}}
+| `howdy-testing/SKILL.md` | writing and fixing tests |
+| `howdy-debugging/SKILL.md` | finding out why something is broken |
+
 ## Check your work
 
 Run this after every change, and fix what it reports before moving on:
