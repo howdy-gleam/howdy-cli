@@ -353,6 +353,26 @@ refuses every request, and a fixed one in the test support. Call another
 service with `remote.call(target, procedure, input, timeout: 5000)`.
 
 ```sh
+howdy add openapi
+```
+
+adds an OpenAPI 3.1 document with `howdy_openapi`, and writes:
+
+| File | Holds |
+| --- | --- |
+| `src/<project>/platform/api_docs.gleam` | the document's title, version and security schemes, and `serve` |
+| `test/<project>/platform/api_docs_test.gleam` | checks the document and its reference page are served |
+
+The app serves the document at `/openapi.json` and a page to read it at
+`/docs`, after its controllers so it documents them all and ahead of the
+static catch-all. Controllers that `howdy create` adds later go before it
+too. The document lists the routes written with `howdy/openapi/endpoint`;
+existing controllers are left as they are, so it starts empty until a
+route is moved to an endpoint. The dev admin needs no wiring: `admin.mount`
+finds the document in the app and lists every endpoint under API, where
+they can be called.
+
+```sh
 howdy create email password_reset
 ```
 
@@ -380,7 +400,7 @@ go install .
 main.go
 internal/
 ├── cli/        cobra commands (root, new, create, add, dev)
-├── generate/   `howdy create controller`, `pages`, `repo`, `migration`, `page`, `live_page`, `layout`, `component`, `live_component` and `email`, and `howdy add mail`, `auth` and `remote`: templates and wiring
+├── generate/   `howdy create controller`, `pages`, `repo`, `migration`, `page`, `live_page`, `layout`, `component`, `live_component` and `email`, and `howdy add mail`, `auth`, `remote` and `openapi`: templates and wiring
 ├── scaffold/   project validation and template rendering
 │   └── templates/
 │       ├── base/      the page-only project, rendered with text/template

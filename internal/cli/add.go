@@ -20,6 +20,7 @@ func addCommand() *cobra.Command {
 	cmd.AddCommand(addMailCommand())
 	cmd.AddCommand(addAuthCommand())
 	cmd.AddCommand(addRemoteCommand())
+	cmd.AddCommand(addOpenAPICommand())
 	return cmd
 }
 
@@ -147,6 +148,137 @@ func runAddRemote(plain, skipDeps bool) error {
 		{Cmd: "gleam test", Note: "call the example procedure on the cluster and over HTTP"},
 	}
 	fmt.Print(tui.NextSteps("remote", commands, notes))
+	return nil
+}
+
+func addOpenAPICommand() *cobra.Command {
+	var plain, skipDeps bool
+	cmd := &cobra.Command{
+		Use:   "openapi",
+		Short: "Add an OpenAPI document with Howdy OpenAPI, served by the app and browsable in the dev admin",
+		Long: `Add an OpenAPI 3.1 document to the current project with Howdy OpenAPI.
+
+It adds howdy_openapi, from the same release as the project's other Howdy
+packages, to gleam.toml, then writes
+
+  src/<project>/platform/api_docs.gleam           the document's title, version and security schemes
+  test/<project>/platform/api_docs_test.gleam     checks the document and reference are served
+
+and serves, after the app's controllers,
+
+  /openapi.json   the document
+  /docs           a reference page to read it
+
+The document lists the routes written with howdy/openapi/endpoint, from the
+schemas they read. Existing controllers are left as they are, so it starts
+empty: move a route to an endpoint to publish it. With the dev admin,
+/_howdy finds the document and lists every endpoint under API, where you
+can call them.`,
+		Example: "  howdy add openapi",
+		Args:    cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runAddOpenAPI(plain, skipDeps)
+		},
+	}
+	cmd.Flags().BoolVar(&skipDeps, "skip-deps", false, "do not run 'gleam deps download' after changing gleam.toml")
+	cmd.Flags().BoolVar(&plain, "plain", false, "print progress as plain lines instead of animating")
+	return cmd
+}
+
+func runAddOpenAPI(plain, skipDeps bool) error {
+	dir, err := findProjectDir()
+	if err != nil {
+		return err
+	}
+	project, err := generate.Open(dir)
+	if err != nil {
+		return err
+	}
+	o, err := generate.NewOpenAPI(project)
+	if err != nil {
+		return err
+	}
+
+	var gleam tools.Tool
+	var notes []string
+	steps := []tui.Step{
+		{
+			Title: "Checking for Gleam",
+			Run: func(r tui.Reporter) (string, error) {
+				var err error
+				gleam, err = tools.FindGleam()
+				return gleam.Version, err
+			},
+		},
+		{
+			Title: "Adding Howdy OpenAPI",
+			Run: func(r tui.Reporter) (string, error) {
+				changed, err := o.Write()
+				for _, path := range changed {
+					r.Log(path)
+				}
+				if err != nil {
+					return "", err
+				}
+				return fmt.Sprintf("howdy_openapi %s, %d files", o.Ref, len(changed)), nil
+			},
+		},
+		{
+			Title: "Serving the document",
+			Run: func(r tui.Reporter) (string, error) {
+				notes = o.Register()
+				if len(notes) > 0 {
+					return "needs a hand, see below", nil
+				}
+				if o.Admin {
+					return "/openapi.json, /docs, dev admin", nil
+				}
+				return "/openapi.json, /docs", nil
+			},
+		},
+		{
+			Title: "Formatting Gleam sources",
+			Run: func(r tui.Reporter) (string, error) {
+				return "gleam format", gleam.Run(dir, "format", "src", "dev", "test")
+			},
+		},
+		{
+			Title: "Downloading dependencies",
+			Skip: func() (string, bool) {
+				if skipDeps {
+					return "skipped (--skip-deps)", true
+				}
+				return "", false
+			},
+			Run: func(r tui.Reporter) (string, error) {
+				r.Detail("gleam deps download")
+				if err := gleam.Run(dir, "deps", "download"); err != nil {
+					r.Warn("Dependency download failed; run 'gleam deps download' to see why.")
+					return "failed", nil
+				}
+				return "ready", nil
+			},
+		},
+	}
+	if err := tui.Run("howdy add openapi", steps, plain); err != nil {
+		return err
+	}
+
+	for i, note := range notes {
+		notes[i] = "Needs a hand: " + note
+	}
+	if o.Admin {
+		notes = append(notes, "The admin at /_howdy lists every documented endpoint under API, and can call them.")
+	}
+	notes = append(notes,
+		"Existing controllers are unchanged, so the document starts empty. Publish a route by writing it with",
+		"howdy/openapi/endpoint, e.g. controller.new(\"user\") |> endpoint.get(\"/:id\", by_id()): see "+o.DocsFile()+".",
+	)
+	commands := []tui.Command{
+		{Cmd: "gleam dev", Note: "then read the API at http://127.0.0.1:8787/docs"},
+		{Cmd: "gleam test", Note: "check the document is served"},
+	}
+	fmt.Print(tui.NextSteps("openapi", commands, notes))
 	return nil
 }
 

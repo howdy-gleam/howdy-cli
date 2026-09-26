@@ -1,0 +1,24 @@
+import gleam/dynamic/decode
+import howdy/testing
+import {{.Name}}/platform/api_docs
+import {{.Name}}/support
+
+pub fn serves_the_document_test() {
+{{- if .Database}}
+  use db <- support.with_db()
+{{- end}}
+  let res =
+    testing.get(api_docs.document_path)
+    |> testing.send(support.app({{if .Database}}db{{end}}))
+  assert res.status == 200
+  assert testing.json(res, decode.at(["info", "title"], decode.string))
+    == Ok("{{.Title}}")
+}
+
+pub fn serves_the_reference_test() {
+{{- if .Database}}
+  use db <- support.with_db()
+{{- end}}
+  let res = testing.get("/docs") |> testing.send(support.app({{if .Database}}db{{end}}))
+  assert res.status == 200
+}

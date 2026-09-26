@@ -1,0 +1,53 @@
+//// The app's OpenAPI document, with howdy_openapi.
+////
+//// Routes written with `howdy/openapi/endpoint` are documented from the
+//// schemas they read and the docs they declare, so the document cannot
+//// drift from the code. Ordinary controller routes are left out, so the app
+//// chooses what it publishes: move a route to an endpoint to add it.
+////
+//// ```gleam
+//// import howdy/openapi/endpoint.{type Endpoint}
+//// import howdy/openapi/schema
+////
+//// pub fn controller() -> controller.Controller {
+////   controller.new("user") |> endpoint.get("/:id", by_id())
+//// }
+////
+//// fn by_id() -> Endpoint(Nil) {
+////   use <- endpoint.describe([
+////     endpoint.summary("Find a user"),
+////     endpoint.response(200, "The user", user.schema()),
+////     endpoint.error(404, "No user has this id"),
+////   ])
+////   use id <- endpoint.path("id", schema.int())
+////   use ctx <- endpoint.handle
+////   user_service.find(id)
+////   |> service.respond(ctx, schema.to_json(_, user.schema()))
+//// }
+//// ```
+{{- if .Admin}}
+////
+//// Under `gleam dev` the admin at `/_howdy` finds the document and lists
+//// every endpoint under API, where you can call them.
+{{- end}}
+
+import howdy
+import howdy/openapi
+
+/// Where the document is served.
+pub const document_path = "/openapi.json"
+
+/// What the document says about the API as a whole. Add servers and
+/// security schemes here, such as `openapi.bearer_auth("bearer")`.
+pub fn spec() -> openapi.Spec {
+  openapi.new(title: "{{.Title}}", version: "0.1.0")
+}
+
+/// Serve the document at `/openapi.json` and a page to read it at `/docs`.
+/// The document covers the controllers mounted before this, so call it
+/// after them.
+pub fn serve(app: howdy.App) -> howdy.App {
+  app
+  |> openapi.serve(spec(), at: document_path)
+  |> openapi.reference(at: "/docs", document: document_path)
+}
