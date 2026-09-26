@@ -1,0 +1,9 @@
+//// Test helpers.
+
+import {{.Name}}
+
+/// The app as the tests see it, with the services it would get at startup.
+pub fn app() {
+  let services = {{.Name}}.Services
+  {{.Name}}.app(services)
+}

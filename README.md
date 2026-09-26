@@ -240,6 +240,63 @@ Every component gets a test beside the others: that it renders, or for a
 live one that it mounts and its socket answers. A component that exists
 already is refused and nothing is written.
 
+## Adding packages
+
+`howdy create` writes a project's own code; `howdy add` installs a Howdy
+package into it and wires it up. Every project's app is built from one
+`Services` record in `src/<project>.gleam`, made by `main`, by `dev/` and by
+the test support, and passed to `app(services)`; `add` puts what it installs
+there, so controllers take it from `services`.
+
+```sh
+howdy add mail
+```
+
+adds `howdy_mail` (from the same release as the project's other Howdy
+packages) and `smail` to `gleam.toml`, and writes:
+
+| File | Holds |
+| --- | --- |
+| `src/<project>/platform/email.gleam` | the mailer `gleam run` uses, from the environment |
+| `src/<project>/emails/welcome_email.gleam` | an example email written with smail, with its preview |
+| `src/<project>/emails/previews.gleam` | every email built from sample data |
+| `test/<project>/emails/previews_test.gleam` | checks every email can be sent |
+
+It then adds `mailer` to the services. `gleam run` sends through
+`SMTP_URL`, `RESEND_API_KEY` or `SENDGRID_API_KEY`, whichever is set, from
+`MAIL_FROM`, and logs each email when none is. `gleam dev` keeps email in
+an outbox that also writes `.eml` files to `tmp/mail` (added to
+`.gitignore`), and when the project has the dev admin, `/_howdy` shows the
+outbox and the previews under Mail. The tests get an in-memory outbox. A
+file that no longer has the shape `howdy new` gave it is left alone, and the
+command prints what to add by hand.
+
+```sh
+howdy add auth
+```
+
+adds sign-in and roles with `howdy_auth`. It needs the project's database,
+as auth keeps its users, sessions and roles there through `howdy_database`,
+and refuses a project without one. Sign-in tokens are emailed, so a project
+without mail gets it as well. It writes `src/<project>/platform/accounts.gleam`,
+which builds the app's `identity` (sign-in by a link or six-digit code
+emailed to the address, and registration the same way) and `permissions`
+(roles), and adds both to the services in `main`, the dev server and the
+test support. `platform/database.gleam`'s `migrate` runs auth's migrations
+after the app's own, so everything that migrates picks them up. The app
+mounts auth's JSON API at `/api/auth` and its starter pages at `/auth`, and
+with the dev admin, `/_howdy` gets users, groups and roles and auth's email
+previews. Guard a controller with
+`controller.guarded("/account", auth.required(services.identity))`. Set
+`APP_ORIGIN` to the site's public address before deploying.
+
+```sh
+howdy create email password_reset
+```
+
+writes `emails/password_reset_email.gleam`, with `build(to:)` and
+`preview()`, and adds the preview to `emails/previews.gleam`.
+
 ## Build
 
 Requires Go 1.25+.
@@ -260,8 +317,8 @@ go install .
 ```text
 main.go
 internal/
-├── cli/        cobra commands (root, new, create, dev)
-├── generate/   `howdy create controller`, `pages`, `repo`, `migration`, `page`, `live_page`, `layout`, `component` and `live_component`: templates and registration
+├── cli/        cobra commands (root, new, create, add, dev)
+├── generate/   `howdy create controller`, `pages`, `repo`, `migration`, `page`, `live_page`, `layout`, `component`, `live_component` and `email`, and `howdy add mail` and `auth`: templates and wiring
 ├── scaffold/   project validation and template rendering
 │   └── templates/
 │       ├── base/      the page-only project, rendered with text/template

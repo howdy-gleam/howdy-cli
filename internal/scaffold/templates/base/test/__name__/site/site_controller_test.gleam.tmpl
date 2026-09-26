@@ -2,10 +2,10 @@ import gleam/http
 import gleam/http/response
 import gleam/string
 import howdy/testing
-import {{.Name}}
+import {{.Name}}/support
 
 pub fn home_page_test() {
-  let res = testing.get("/") |> testing.send({{.Name}}.app())
+  let res = testing.get("/") |> testing.send(support.app())
   assert res.status == 200
   assert response.get_header(res, "content-type")
     == Ok("text/html; charset=utf-8")
@@ -13,7 +13,7 @@ pub fn home_page_test() {
 }
 
 pub fn home_page_supports_head_test() {
-  let res = testing.request(http.Head, "/") |> testing.send({{.Name}}.app())
+  let res = testing.request(http.Head, "/") |> testing.send(support.app())
   assert res.status == 200
 }
 
@@ -21,12 +21,12 @@ pub fn home_page_uses_theme_cookie_test() {
   let res =
     testing.get("/")
     |> testing.cookie("theme", "dark")
-    |> testing.send({{.Name}}.app())
+    |> testing.send(support.app())
   assert string.contains(testing.text(res), "data-theme=\"dark\"")
 }
 
 pub fn assets_are_served_test() {
-  let app = {{.Name}}.app()
+  let app = support.app()
   let ui = testing.get("/assets/ui.css") |> testing.send(app)
   assert ui.status == 200
   assert string.contains(testing.text(ui), "--howdy-primary")
@@ -36,7 +36,7 @@ pub fn assets_are_served_test() {
 }
 
 pub fn unknown_routes_are_not_found_test() {
-  let app = {{.Name}}.app()
+  let app = support.app()
   assert testing.send(testing.get("/missing"), app).status == 404
   assert testing.send(testing.get("/gleam.toml"), app).status == 404
 }

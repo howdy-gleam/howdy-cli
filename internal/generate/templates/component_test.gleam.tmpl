@@ -3,7 +3,7 @@ import gleam/string
 import howdy/testing
 {{- end}}
 import lustre/element
-{{- if and .Live .HasDatabase}}
+{{- if and .Live (or .HasDatabase .HasSupport)}}
 import {{.Project.Name}}/support
 {{- else if .Live}}
 import {{.Project.Name}}
@@ -20,6 +20,8 @@ pub fn {{.Module}}_socket_requires_websocket_test() {
 {{- if .HasDatabase}}
   use db <- support.with_db()
   let res = testing.get("{{.URL}}") |> testing.send(support.app(db))
+{{- else if .HasSupport}}
+  let res = testing.get("{{.URL}}") |> testing.send(support.app())
 {{- else}}
   let res = testing.get("{{.URL}}") |> testing.send({{.Project.Name}}.app())
 {{- end}}

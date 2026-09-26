@@ -1,6 +1,6 @@
 import gleam/string
 import howdy/testing
-{{- if .HasDatabase}}
+{{- if or .HasDatabase .HasSupport}}
 import {{.Project.Name}}/support
 {{- else}}
 import {{.Project.Name}}
@@ -10,6 +10,8 @@ pub fn {{.Module}}_test() {
 {{- if .HasDatabase}}
   use db <- support.with_db()
   let res = testing.get("{{.URL}}") |> testing.send(support.app(db))
+{{- else if .HasSupport}}
+  let res = testing.get("{{.URL}}") |> testing.send(support.app())
 {{- else}}
   let res = testing.get("{{.URL}}") |> testing.send({{.Project.Name}}.app())
 {{- end}}
@@ -22,6 +24,8 @@ pub fn {{.Module}}_socket_requires_websocket_test() {
 {{- if .HasDatabase}}
   use db <- support.with_db()
   let res = testing.get("{{.SocketURL}}") |> testing.send(support.app(db))
+{{- else if .HasSupport}}
+  let res = testing.get("{{.SocketURL}}") |> testing.send(support.app())
 {{- else}}
   let res = testing.get("{{.SocketURL}}") |> testing.send({{.Project.Name}}.app())
 {{- end}}

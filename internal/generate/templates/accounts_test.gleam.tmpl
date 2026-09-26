@@ -1,0 +1,16 @@
+import gleam/string
+import howdy/testing
+import {{.Name}}/support
+
+pub fn sign_in_page_test() {
+  use db <- support.with_db()
+  let res = testing.get("/auth/login") |> testing.send(support.app(db))
+  assert res.status == 200
+}
+
+pub fn nobody_is_signed_in_to_begin_with_test() {
+  use db <- support.with_db()
+  let res = testing.get("/api/auth/me") |> testing.send(support.app(db))
+  assert res.status == 401
+  assert !string.contains(testing.text(res), "@")
+}

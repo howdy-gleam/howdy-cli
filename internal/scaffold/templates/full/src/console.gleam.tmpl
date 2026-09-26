@@ -17,7 +17,9 @@
 
 {{- if .Database}}
 import gloo/repo.{type Repo}
+{{- end}}
 import howdy/console as exposed
+{{- if .Database}}
 import howdy/service
 {{- end}}
 import howdy/testing
@@ -26,7 +28,6 @@ import {{.Name}}
 import {{.Name}}/todos/todo_item.{type Todo, TodoInput}
 import {{.Name}}/todos/todos
 {{- end}}
-{{- if .Database}}
 
 /// What the running server exposed at startup. Fails on a node where the
 /// server has not started.
@@ -37,6 +38,7 @@ pub fn services() -> {{.Name}}.Services {
       panic as "the server is not running on this node: open the console with the commands in the README"
   }
 }
+{{- if .Database}}
 
 /// The server's database, for `todos.all(console.db())` and the like.
 pub fn db() -> Repo {
@@ -58,6 +60,6 @@ pub fn add_todo(title: String) -> service.Result(Todo) {
 /// Send a GET request through the app without a socket, and return the
 /// status and body.
 pub fn get(path: String) -> #(Int, String) {
-  let response = testing.get(path) |> testing.send({{.Name}}.app({{if .Database}}db(){{end}}))
+  let response = testing.get(path) |> testing.send({{.Name}}.app(services()))
   #(response.status, testing.text(response))
 }

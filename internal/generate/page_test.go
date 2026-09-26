@@ -71,7 +71,7 @@ func TestPageCreatesController(t *testing.T) {
 		test := read(t, p, "test/demo_site/blog/pages/about_page_test.gleam")
 		app := "support.app(db)"
 		if db == scaffold.NoDatabase {
-			app = "demo_site.app()"
+			app = "support.app()"
 		}
 		if !strings.Contains(test, `testing.get("/blog/about") |> testing.send(`+app+`)`) {
 			t.Errorf("%s: unexpected test:\n%s", db.Label(), test)

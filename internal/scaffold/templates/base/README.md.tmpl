@@ -162,6 +162,15 @@ add to a page's content. `howdy create live_component [controller] <name>`
 writes a Lustre server component and routes its WebSocket; put it on a page
 with its `mount()`, in a page that renders with `render_live`.
 
+## Email
+
+`howdy add mail` adds Howdy Mail. The app's services in
+`src/{{.Name}}.gleam` get a mailer, so controllers send with
+`services.mailer`: through the provider the environment names under
+`gleam run`, and into an outbox under `gleam dev`{{if .Full}}, which the admin shows
+under Mail with a preview of every email{{end}}. `howdy create email <name>` adds
+another email.
+
 ## Styles
 
 During `gleam dev` the Howdy UI stylesheet is generated on request. For

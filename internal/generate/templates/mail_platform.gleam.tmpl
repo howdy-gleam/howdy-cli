@@ -1,0 +1,59 @@
+//// Email for `gleam run`: the mailer `main` puts in the app's services. It
+//// sends through the first provider the environment names:
+////
+//// - `SMTP_URL`, such as `smtp://user:password@smtp.example.com:587`
+//// - `RESEND_API_KEY`
+//// - `SENDGRID_API_KEY`
+////
+//// With none of them set, each email is logged instead of sent, so the app
+//// runs before a provider is chosen. `gleam dev` and the tests keep email
+//// in an outbox instead of sending it.
+
+import dot_env/env
+import gleam/list
+import gleam/option.{None}
+import gleam/string
+import howdy/mail
+import howdy/mail/resend
+import howdy/mail/sendgrid
+import howdy/mail/smtp
+import logging
+
+pub fn mailer() -> mail.Mailer {
+  mail.mailer(adapter()) |> mail.default_from(sender())
+}
+
+/// Who email comes from: `MAIL_FROM`, or a placeholder until it is set.
+pub fn sender() -> mail.Address {
+  let from = env.get_string_or("MAIL_FROM", "{{.Title}} <hello@example.com>")
+  case mail.parse_address(from) {
+    Ok(address) -> address
+    Error(Nil) ->
+      panic as "MAIL_FROM must be an address, such as {{.Title}} <hello@example.com>"
+  }
+}
+
+fn adapter() -> mail.Adapter {
+  case smtp.from_env(), resend.from_env(), sendgrid.from_env() {
+    Ok(config), _, _ -> smtp.adapter(config)
+    Error(smtp.MissingUrl(_)), Ok(config), _ -> resend.adapter(config)
+    Error(smtp.MissingUrl(_)), _, Ok(config) -> sendgrid.adapter(config)
+    Error(smtp.MissingUrl(_)), _, _ -> logged()
+    Error(_), _, _ ->
+      panic as "SMTP_URL must look like smtp://user:password@host:port or smtps://..."
+  }
+}
+
+fn logged() -> mail.Adapter {
+  mail.adapter(named: "log", send: fn(outgoing: mail.Outgoing) {
+    let to = list.map(outgoing.to, mail.address_to_string)
+    logging.log(
+      logging.Warning,
+      "Email not sent, as no provider is configured: \""
+        <> outgoing.subject
+        <> "\" to "
+        <> string.join(to, ", "),
+    )
+    Ok(mail.Receipt(outgoing.id, None))
+  })
+}

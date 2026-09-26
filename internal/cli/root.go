@@ -26,6 +26,7 @@ func Execute() error {
 	}
 	root.AddCommand(newCommand())
 	root.AddCommand(createCommand())
+	root.AddCommand(addCommand())
 	root.AddCommand(devCommand())
 
 	err := root.Execute()

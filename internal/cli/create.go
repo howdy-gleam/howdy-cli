@@ -25,7 +25,86 @@ func createCommand() *cobra.Command {
 	cmd.AddCommand(createLayoutCommand())
 	cmd.AddCommand(createComponentCommand(false))
 	cmd.AddCommand(createComponentCommand(true))
+	cmd.AddCommand(createEmailCommand())
 	return cmd
+}
+
+func createEmailCommand() *cobra.Command {
+	var plain bool
+	cmd := &cobra.Command{
+		Use:   "email <name>",
+		Short: "Create an email, with its preview for the dev admin",
+		Long: `Create src/<project>/emails/<name>_email.gleam: an email written with smail,
+with build(to:) to make the message and preview() to build it from sample
+data. The preview is added to emails/previews.gleam, so the dev admin shows
+it under Mail and the tests check that it can be sent.
+
+The project needs mail first: 'howdy add mail'.`,
+		Example: "  howdy create email password_reset\n  howdy create email order_shipped",
+		Args:    cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runCreateEmail(args[0], plain)
+		},
+	}
+	cmd.Flags().BoolVar(&plain, "plain", false, "print progress as plain lines instead of animating")
+	return cmd
+}
+
+func runCreateEmail(name string, plain bool) error {
+	dir, err := findProjectDir()
+	if err != nil {
+		return err
+	}
+	project, err := generate.Open(dir)
+	if err != nil {
+		return err
+	}
+	email, err := generate.NewEmail(project, name)
+	if err != nil {
+		return err
+	}
+	var notes []string
+	steps := []tui.Step{
+		{
+			Title: "Creating the email",
+			Run: func(r tui.Reporter) (string, error) {
+				return email.Write()
+			},
+		},
+		{
+			Title: "Adding its preview",
+			Run: func(r tui.Reporter) (string, error) {
+				notes = email.Register()
+				if len(notes) > 0 {
+					return "needs a hand, see below", nil
+				}
+				return fmt.Sprintf("src/%s/emails/previews.gleam", project.Name), nil
+			},
+		},
+		{
+			Title: "Formatting Gleam sources",
+			Run: func(r tui.Reporter) (string, error) {
+				gleam, err := tools.FindGleam()
+				if err != nil {
+					r.Warn("gleam was not found on PATH; run 'gleam format' yourself.")
+					return "skipped", nil
+				}
+				return "gleam format", gleam.Run(dir, "format", "src")
+			},
+		},
+	}
+	if err := tui.Run(fmt.Sprintf("howdy create email %s", email.Name), steps, plain); err != nil {
+		return err
+	}
+	notes = append([]string{
+		fmt.Sprintf("Write the email in %s, and give build the arguments it needs.", email.File()),
+		fmt.Sprintf("Send it with mail.send(mailer, %s.build(to: address)), using the mailer in the app's services.", email.Module()),
+	}, notes...)
+	fmt.Print(tui.NextSteps(email.Module(), []tui.Command{
+		{Cmd: "gleam dev", Note: "then see it under Mail in the admin at http://127.0.0.1:8787/_howdy"},
+		{Cmd: "gleam test", Note: "check that it can be sent"},
+	}, notes))
+	return nil
 }
 
 func createComponentCommand(live bool) *cobra.Command {

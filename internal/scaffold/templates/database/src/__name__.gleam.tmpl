@@ -24,9 +24,17 @@ import {{.Name}}/platform/database
 import {{.Name}}/site/site_controller as site
 import {{.Name}}/todos/todo_controller as todos
 
+/// Everything the app is built from, made once at startup: by `main`, by
+/// `dev/` with development versions, and by the tests. Controllers take what
+/// they need from it, and `howdy add` puts what it installs here.
+pub type Services {
+  Services(db: Repo)
+}
+
 /// The app without a listener, so tests can send requests through it with
 /// `howdy/testing`. Register new controllers here.
-pub fn app(db: Repo) -> howdy.App {
+pub fn app(services: Services) -> howdy.App {
+  let db = services.db
   howdy.new()
   |> howdy.controller(todos.controller(db))
   |> howdy.controller(site.controller(db))
@@ -57,21 +65,16 @@ pub fn database() -> Repo {
 }
 {{- if .Full}}
 
-/// What a console attached to the running server can reach. Add anything
-/// else `main` builds that you want to use from `src/console.gleam`.
-pub type Services {
-  Services(db: Repo)
-}
-
-/// The key the services are exposed under. Declare it once, here.
+/// The key the services are exposed under, for `src/console.gleam`.
+/// Declare it once, here.
 pub fn services_key() -> console.Key(Services) {
   console.key("{{.Name}}")
 }
 
 /// Make the services available to a console on this node. Call once at
 /// startup, never per request.
-pub fn expose(db: Repo) -> Nil {
-  console.expose(services_key(), Services(db:))
+pub fn expose(services: Services) -> Nil {
+  console.expose(services_key(), services)
 }
 
 /// Send a trace of every request to an OpenTelemetry collector when
@@ -90,10 +93,10 @@ pub fn start_telemetry() -> Nil {
 {{- end}}
 
 /// The app with request logging, bound to localhost on `PORT`.
-pub fn configured(db: Repo) -> howdy.App {
+pub fn configured(services: Services) -> howdy.App {
   let port = env.get_int_or("PORT", 8787)
   let assert True = port > 0 && port <= 65_535 as "PORT must be 1-65535"
-  app(db)
+  app(services)
   |> howdy.middleware(logger.log)
   |> howdy.bind("127.0.0.1")
   |> howdy.listening(port)
@@ -109,9 +112,10 @@ pub fn main() -> Nil {
   // production deployment you may prefer to migrate separately with
   // `gleam run -m tasks/migrate` and remove this line.
   let assert Ok(_) = database.migrate(db)
+  let services = Services(db:)
 {{- if .Full}}
-  expose(db)
+  expose(services)
 {{- end}}
-  let assert Ok(_) = configured(db) |> howdy.start
+  let assert Ok(_) = configured(services) |> howdy.start
   process.sleep_forever()
 }

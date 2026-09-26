@@ -16,8 +16,10 @@ pub fn with_db(run_test: fn(Repo) -> a) -> a {
   run_test(db)
 }
 
+/// The app as the tests see it, with the services it would get at startup.
 pub fn app(db: Repo) {
-  {{.Name}}.app(db)
+  let services = {{.Name}}.Services(db:)
+  {{.Name}}.app(services)
 }
 
 /// Fixtures go through the same validator as requests.

@@ -1,0 +1,38 @@
+//// The {{.Title}} email. Build it with `{{.Module}}.build(to: address)` and
+//// send it with the app's mailer:
+////
+////     mail.send(services.mailer, {{.Module}}.build(to: address))
+////
+//// Its preview, built from sample data, is listed in `previews.gleam`, and
+//// the dev admin shows it under Mail.
+
+import howdy/mail
+import howdy/mail/preview.{type Preview}
+import smail/email
+import smail/html
+
+pub fn build(to recipient: mail.Address) -> mail.Message {
+  mail.message()
+  |> mail.to([recipient])
+  |> mail.subject("{{.Subject}}")
+  |> mail.template(
+    email.html([], [
+      email.head([], []),
+      email.body([], [
+        email.preview("{{.Subject}}"),
+        email.container([], [
+          email.h2([], [html.text("{{.Subject}}")]),
+          email.paragraph([], [html.text("Write this email in {{.File}}.")]),
+        ]),
+      ]),
+    ]),
+  )
+  |> mail.tag("{{.Name}}")
+}
+
+/// The email built from sample data, for the dev admin.
+pub fn preview() -> Preview {
+  preview.new("{{.Title}}", fn() {
+    build(to: mail.named("Ada Lovelace", "ada@example.com"))
+  })
+}

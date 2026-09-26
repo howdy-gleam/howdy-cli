@@ -125,7 +125,15 @@ func (c *Component) URL() string {
 	return "/" + c.Prefix + c.Route()
 }
 
-// HasDatabase reports whether the test goes through test/<project>/support.gleam.
+// HasSupport reports whether the project has test/<project>/support.gleam,
+// which 'howdy new' writes into every project, and which builds the app
+// with its services for the tests.
+func (c *Component) HasSupport() bool {
+	_, err := os.Stat(filepath.Join(c.Project.Dir, "test", c.Project.Name, "support.gleam"))
+	return err == nil
+}
+
+// HasDatabase reports whether the test uses a database from test/<project>/support.gleam.
 func (c *Component) HasDatabase() bool { return c.Project.Database != "" }
 
 func (c *Component) testFile() string {

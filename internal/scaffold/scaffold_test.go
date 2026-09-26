@@ -301,7 +301,7 @@ func TestFullProject(t *testing.T) {
 		}
 		for path, want := range map[string]string{
 			"dev/demo_site_dev.gleam": "admin.database(db)",
-			"src/demo_site.gleam":     "console.expose(services_key(), Services(db:))",
+			"src/demo_site.gleam":     "let services = Services(db:)",
 			"src/console.gleam":       "exposed.get(demo_site.services_key())",
 		} {
 			if !strings.Contains(byPath[path], want) {

@@ -37,9 +37,10 @@ pub fn main() -> Nil {
 {{- end}}
   let db = {{.Name}}.database()
   let assert Ok(_) = database.migrate(db)
+  let services = {{.Name}}.Services(db:)
 {{- if .Full}}
   // For a console attached to this server: see src/console.gleam.
-  {{.Name}}.expose(db)
+  {{.Name}}.expose(services)
   let dashboard =
     admin.new()
     |> admin.named("{{.Title}}")
@@ -48,7 +49,7 @@ pub fn main() -> Nil {
 {{- end}}
   let assert Ok(_) =
     dev.new(fn() {
-      {{.Name}}.configured(db)
+      {{.Name}}.configured(services)
       |> howdy.controller(site.stylesheet())
 {{- if .Full}}
       |> admin.mount(dashboard)

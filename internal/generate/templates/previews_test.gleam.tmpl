@@ -1,0 +1,18 @@
+import gleam/list
+import howdy/mail
+import howdy/mail/outbox
+import howdy/mail/preview
+import {{.Project.Name}}/emails/previews
+import {{.Project.Name}}/platform/email
+
+/// Every email builds from its sample data and would be accepted for
+/// sending: a sender, a recipient, a subject and a body.
+pub fn every_email_can_be_sent_test() {
+  let mailer =
+    mail.mailer(outbox.adapter(outbox.start()))
+    |> mail.default_from(email.sender())
+  list.each(previews.all(), fn(item) {
+    let assert Ok(message) = preview.build(item)
+    let assert Ok(_) = mail.prepare(mailer, message)
+  })
+}

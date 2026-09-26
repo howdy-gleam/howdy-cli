@@ -1,0 +1,78 @@
+//// Signing in, with Howdy Auth. `main`, `dev/` and the tests build the
+//// app's `identity` and `permissions` here, and put them in its services.
+////
+//// People sign in with a link or code emailed to their address, sent with
+//// the app's mailer, and register the same way. The pages are at `/auth`
+//// and the JSON API at `/api/auth`. Other ways in, such as passwords,
+//// passkeys or Google, are added to `identity` below: see the auth docs.
+////
+//// A controller that needs someone signed in takes the identity and guards
+//// its routes; `ctx.guard.user` is then the signed-in user:
+////
+////     controller.guarded("/account", auth.required(identity))
+////     |> controller.get("/", fn(ctx) { ... ctx.guard.user ... })
+
+import dot_env/env
+import gleam/int
+import gleam/result
+import gloo/repo.{type Repo}
+import howdy/auth
+import howdy/auth/emails
+import howdy/authorization as access
+import howdy/mail
+import howdy/mail/preview.{type Preview}
+import howdy/migration
+import howdy/service
+
+/// Everything signing in needs, built once at startup, after `migrate`.
+pub fn identity(db: Repo, mailer: mail.Mailer) -> auth.Auth {
+  let assert Ok(identity) =
+    auth.new(
+      repo: db,
+      origin: origin(),
+      deliver: emails.deliver(auth_emails(mailer)),
+    )
+    as "auth could not start: has the database been migrated?"
+  // The emails carry a link to the sign-in page and a six-digit code, as
+  // well as the token to paste.
+  let assert Ok(identity) = auth.with_email_links(identity, at: "/auth")
+  identity
+  |> auth.with_email_codes
+  |> auth.allow_registration
+}
+
+/// Roles and the permissions they grant, for guards such as
+/// `access.require_permission(permissions, "reports.read", access.Global)`.
+/// Define roles with `access.define_role`, or in the dev admin.
+pub fn permissions(db: Repo) -> access.Authorization {
+  let assert Ok(permissions) = access.new(db)
+    as "roles could not start: has the database been migrated?"
+  permissions
+}
+
+/// The address people reach the site at, which auth's links, cookies and
+/// origin checks are for: `APP_ORIGIN`, or the local server. Only scheme,
+/// host and port; HTTPS everywhere but on this machine.
+pub fn origin() -> String {
+  env.get_string_or(
+    "APP_ORIGIN",
+    "http://127.0.0.1:" <> int.to_string(env.get_int_or("PORT", 8787)),
+  )
+}
+
+/// Create auth's tables and those for roles, or bring them up to date. They
+/// are named `howdy_auth_*` and `howdy_authz_*`, and kept by
+/// `howdy/migration` beside the app's own migrations.
+pub fn migrate(db: Repo) -> Result(Nil, String) {
+  migration.run(db, [auth.schema(), access.schema()])
+  |> result.map_error(service.message)
+}
+
+/// Every email auth sends, built from sample data, for the dev admin.
+pub fn previews(mailer: mail.Mailer) -> List(Preview) {
+  emails.previews(auth_emails(mailer))
+}
+
+fn auth_emails(mailer: mail.Mailer) -> emails.Emails {
+  emails.new(mailer, app_name: "{{.Title}}")
+}

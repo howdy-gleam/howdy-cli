@@ -1,0 +1,10 @@
+//// Every email the app sends, built from sample data. The dev admin shows
+//// them under Mail, and sends any of them to the outbox on request.
+//// `howdy create email <name>` adds each new email here.
+
+import howdy/mail/preview.{type Preview}
+import {{.Project.Name}}/emails/welcome_email
+
+pub fn all() -> List(Preview) {
+  [welcome_email.preview()]
+}

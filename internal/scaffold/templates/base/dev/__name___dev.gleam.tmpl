@@ -23,6 +23,11 @@ import {{.Name}}/site/site_controller as site
 
 pub fn main() -> Nil {
   {{.Name}}.load_environment()
+  let services = {{.Name}}.Services
+{{- if .Full}}
+  // For a console attached to this server: see src/console.gleam.
+  {{.Name}}.expose(services)
+{{- end}}
 {{- if .Full}}
   // Keep the newest 200 traces in memory for the admin's Telemetry pages.
   let recorder = recorder.new(keep: 200)
@@ -35,7 +40,7 @@ pub fn main() -> Nil {
 {{- end}}
   let assert Ok(_) =
     dev.new(fn() {
-      {{.Name}}.configured()
+      {{.Name}}.configured(services)
       |> howdy.controller(site.stylesheet())
 {{- if .Full}}
       |> admin.mount(dashboard)

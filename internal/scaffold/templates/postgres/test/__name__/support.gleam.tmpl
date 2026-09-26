@@ -60,8 +60,10 @@ fn empty(db: Repo) {
   }
 }
 
+/// The app as the tests see it, with the services it would get at startup.
 pub fn app(db: Repo) {
-  {{.Name}}.app(db)
+  let services = {{.Name}}.Services(db:)
+  {{.Name}}.app(services)
 }
 
 /// Fixtures go through the same validator as requests.

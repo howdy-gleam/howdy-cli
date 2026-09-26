@@ -153,7 +153,15 @@ func (pg *Page) url(route string) string {
 	return strings.TrimSuffix("/"+pg.Prefix+route, "/")
 }
 
-// HasDatabase reports whether the test goes through test/<project>/support.gleam.
+// HasSupport reports whether the project has test/<project>/support.gleam,
+// which 'howdy new' writes into every project, and which builds the app
+// with its services for the tests.
+func (pg *Page) HasSupport() bool {
+	_, err := os.Stat(filepath.Join(pg.Project.Dir, "test", pg.Project.Name, "support.gleam"))
+	return err == nil
+}
+
+// HasDatabase reports whether the test uses a database from test/<project>/support.gleam.
 func (pg *Page) HasDatabase() bool { return pg.Project.Database != "" }
 
 // Files renders the page, the controller if it is new, and a test when the
