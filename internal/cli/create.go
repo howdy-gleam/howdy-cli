@@ -326,7 +326,7 @@ With --add-auth, a controller it creates guards every route with Howdy
 Auth, so only someone signed in reaches them; the project needs 'howdy add
 auth' first. A controller that exists keeps its guard, or lack of one, and
 --add-auth is refused for one without.`,
-		Example: "  howdy create page blog about\n  howdy create page blog index\n  howdy create page site contact\n  howdy create page admin index --layout admin\n  howdy create page account index --add-auth",
+		Example: "  howdy create page blog about\n  howdy create page blog index\n  howdy create page home contact\n  howdy create page admin index --layout admin\n  howdy create page account index --add-auth",
 		Args:    cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runCreatePage(args[0], args[1], live, layout, addAuth, plain)

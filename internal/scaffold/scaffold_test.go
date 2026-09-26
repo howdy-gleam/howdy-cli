@@ -13,7 +13,9 @@ func TestValidateName(t *testing.T) {
 			t.Errorf("%q should be valid: %v", ok, err)
 		}
 	}
-	for _, bad := range []string{"", "MySite", "1site", "my-site", "gleam_thing", "test", "howdy", "type"} {
+	for _, bad := range []string{"", "MySite", "1site", "my-site", "gleam_thing", "test", "howdy", "type",
+		// Erlang/OTP modules, and a project whose test module would be one.
+		"pg", "lists", "json", "auth", "timer", "ct_property"} {
 		if err := ValidateName(bad); err == nil {
 			t.Errorf("%q should be rejected", bad)
 		}
@@ -58,12 +60,12 @@ func TestWriteRendersProject(t *testing.T) {
 
 	want := []string{
 		"gleam.toml", "README.md", ".gitignore", ".env.example",
-		"src/demo_site.gleam", "src/demo_site/features/site/site_controller.gleam", "src/demo_site/layouts/default_layout.gleam",
+		"src/demo_site.gleam", "src/demo_site/features/home/home_controller.gleam", "src/demo_site/features/home/pages/index.gleam", "src/demo_site/layouts/default_layout.gleam",
 		"src/tasks/css.gleam", "dev/demo_site_dev.gleam",
-		"test/demo_site_test.gleam", "test/demo_site/features/site/site_controller_test.gleam",
+		"test/demo_site_test.gleam", "test/demo_site/features/home/home_controller_test.gleam",
 		"priv/public/assets/style.css", "priv/public/assets/ui.css",
-		"src/demo_site/features/site/pages/not_found_page.gleam", "src/demo_site/platform/not_found.gleam",
-		"test/demo_site/features/site/not_found_test.gleam",
+		"src/demo_site/features/home/pages/not_found_page.gleam", "src/demo_site/platform/not_found.gleam",
+		"test/demo_site/features/home/not_found_test.gleam",
 	}
 	for _, w := range want {
 		if _, err := os.Stat(filepath.Join(p.Dir, w)); err != nil {
@@ -85,12 +87,12 @@ func TestWriteRendersProject(t *testing.T) {
 	if strings.Contains(string(toml), "gloo") {
 		t.Error("page-only project should not depend on gloo")
 	}
-	site, _ := os.ReadFile(filepath.Join(p.Dir, "src/demo_site/features/site/site_controller.gleam"))
-	if !strings.Contains(string(site), `ui.h1("Howdy, Demo site!")`) {
-		t.Error("site controller does not use the project title")
+	home, _ := os.ReadFile(filepath.Join(p.Dir, "src/demo_site/features/home/pages/index.gleam"))
+	if !strings.Contains(string(home), `ui.h1("Howdy, Demo site!")`) {
+		t.Error("home page does not use the project title")
 	}
-	if strings.Contains(string(site), "{{") {
-		t.Error("unrendered template markers in site controller")
+	if strings.Contains(string(home), "{{") {
+		t.Error("unrendered template markers in home page")
 	}
 	if _, err := os.Stat(filepath.Join(p.Dir, "src/demo_site/features/todos/todos.gleam")); err == nil {
 		t.Error("page-only project should not contain the todos slice")
@@ -118,7 +120,7 @@ func TestDatabaseOverlay(t *testing.T) {
 	}
 	for _, want := range []string{
 		"src/demo_site/features/todos/todo_item.gleam", "src/demo_site/features/todos/todos.gleam",
-		"src/demo_site/features/todos/todo_controller.gleam", "src/demo_site/features/site/todo_list.gleam",
+		"src/demo_site/features/todos/todo_controller.gleam", "src/demo_site/features/home/components/todo_list_live_component.gleam",
 		"src/demo_site/migrations/create_todos.gleam", "src/demo_site/platform/database.gleam",
 		"src/tasks/migrate.gleam", "test/demo_site/support.gleam", "test/demo_site_test_ffi.erl",
 		"priv/public/assets/ui.css", "src/tasks/css.gleam",
@@ -367,12 +369,12 @@ func TestAPIProject(t *testing.T) {
 				if strings.Contains(content, "{{") {
 					t.Errorf("unrendered template markers in %s (%s)", f.Path, label)
 				}
-				for _, prefix := range []string{"priv/", "src/demo_site/features/site/", "src/demo_site/layouts/", "test/demo_site/features/site/"} {
+				for _, prefix := range []string{"priv/", "src/demo_site/features/home/", "src/demo_site/layouts/", "test/demo_site/features/home/"} {
 					if strings.HasPrefix(f.Path, prefix) {
 						t.Errorf("an API project (%s) should not have %s", label, f.Path)
 					}
 				}
-				for _, word := range []string{"howdy_ui", "howdy/ui", "lustre", "static.serve", "platform/not_found", "not_found_page", "site_controller", "priv/public", "tasks/css", "_layout"} {
+				for _, word := range []string{"howdy_ui", "howdy/ui", "lustre", "static.serve", "platform/not_found", "not_found_page", "home_controller", "priv/public", "tasks/css", "_layout"} {
 					if strings.Contains(content, word) {
 						t.Errorf("%s in an API project (%s) mentions %q", f.Path, label, word)
 					}

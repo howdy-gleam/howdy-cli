@@ -18,7 +18,7 @@ development and a test database. `--database sqlite` is the default, and
 `--no-database` gives a page-only project. The layout is a trimmed-down
 version of `howdy_example`.
 
-Every project has a 404 page, `features/site/pages/not_found_page.gleam`, rendered
+Every project has a 404 page, `features/home/pages/not_found_page.gleam`, rendered
 with its default layout. Middleware in `platform/not_found.gleam` shows it
 for a 404 when the request's `Accept` header prefers HTML, as a browser's
 does; API clients, `fetch` and curl get Howdy's JSON error, and a 404 page a

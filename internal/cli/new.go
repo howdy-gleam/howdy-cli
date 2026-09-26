@@ -55,8 +55,10 @@ match. By default that is Howdy ` + scaffold.Release + `, the release these
 templates are written for; pass --howdy to choose another.
 
 The name must be a valid Gleam project name: lowercase letters, digits and
-underscores, starting with a letter. A path such as apps/my_site also works;
-the last segment is the project name.`,
+underscores, starting with a letter. It cannot be the name of a module that
+ships with Erlang, such as pg, auth or timer, which the project's own module
+would replace. A path such as apps/my_site also works; the last segment is the
+project name.`,
 		Example: "  howdy new my_site\n  howdy new my_site --database postgres\n  howdy new my_site --no-database\n  howdy new my_site --minimal\n  howdy new my_api --api-only\n  howdy new my_site --howdy 2.1.0\n  howdy new apps/my_site",
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -216,7 +218,7 @@ func nextSteps(project *scaffold.Project) []tui.Command {
 func notes(project *scaffold.Project) []string {
 	n := project.Name
 	notes := []string{
-		fmt.Sprintf("The home page lives in src/%s/features/site/site_controller.gleam. Static files go in priv/public.", n),
+		fmt.Sprintf("The home page lives in src/%s/features/home/pages/index.gleam. Static files go in priv/public.", n),
 	}
 	if project.API {
 		notes = []string{
@@ -233,7 +235,7 @@ func notes(project *scaffold.Project) []string {
 	if project.Database != scaffold.NoDatabase {
 		notes = append(notes,
 			fmt.Sprintf("Todos live in src/%s/features/todos/ (record, database operations, JSON API at /api/todos)", n),
-			fmt.Sprintf("and the live list in src/%s/features/site/todo_list.gleam. Migrations are in src/%s/migrations/.", n, n),
+			fmt.Sprintf("and the live list in src/%s/features/home/components/todo_list_live_component.gleam. Migrations are in src/%s/migrations/.", n, n),
 		)
 		if project.API {
 			notes[len(notes)-1] = fmt.Sprintf("Migrations are in src/%s/migrations/.", n)

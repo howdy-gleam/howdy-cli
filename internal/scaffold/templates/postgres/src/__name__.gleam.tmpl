@@ -28,7 +28,7 @@ import {{.Name}}/features/health/health_controller as health
 import {{.Name}}/platform/database
 {{- if not .API}}
 import {{.Name}}/platform/not_found
-import {{.Name}}/features/site/site_controller as site
+import {{.Name}}/features/home/home_controller as home
 {{- end}}
 import {{.Name}}/features/todos/todo_controller as todos
 
@@ -52,7 +52,7 @@ pub fn app(services: Services) -> howdy.App {
     service.error_response(ctx, service.NotFound("Not found"))
   })
 {{- else}}
-  |> howdy.controller(site.controller(db))
+  |> howdy.controller(home.controller(db))
   // The root static controller is a catch-all, so mount it last.
   |> howdy.controller(static.serve("/", from: "priv/public"))
   // People get the 404 page, API clients JSON: see platform/not_found.gleam.

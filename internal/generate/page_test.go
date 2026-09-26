@@ -109,14 +109,14 @@ func TestPageAddsToExistingController(t *testing.T) {
 		t.Error("the live page test should check the socket route")
 	}
 
-	// The site controller from 'howdy new' is mounted at the root and takes
+	// The home controller from 'howdy new' is mounted at the root and takes
 	// the database.
-	site := createPage(t, p, "site", "contact", false)
-	if site.URL() != "/contact" {
-		t.Errorf("URL = %s", site.URL())
+	home := createPage(t, p, "home", "contact", false)
+	if home.URL() != "/contact" {
+		t.Errorf("URL = %s", home.URL())
 	}
-	if !strings.Contains(read(t, p, "src/demo_site/features/site/site_controller.gleam"), `|> controller.get("/contact", contact_page.show)`+"\n}") {
-		t.Error("the page was not added to the site controller")
+	if !strings.Contains(read(t, p, "src/demo_site/features/home/home_controller.gleam"), `|> controller.get("/contact", contact_page.show)`+"\n}") {
+		t.Error("the page was not added to the home controller")
 	}
 }
 
@@ -143,7 +143,7 @@ func TestPageRefusesDuplicates(t *testing.T) {
 		{"blog", "about", false, `the page "about" already exists in the blog controller`},
 		{"blog", "about_page", true, `the page "about" already exists in the blog controller`},
 		// home is routed by the site controller but has no page file.
-		{"site", "index", false, "the site controller already has a page at /, which is where an index page goes"},
+		{"home", "index", false, "the home controller already has a page at /, which is where an index page goes"},
 	} {
 		_, err := NewPage(p, c.controller, c.name, c.live, "", false)
 		if err == nil || !strings.Contains(err.Error(), c.want) {

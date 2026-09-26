@@ -1,35 +1,15 @@
-//// The home page and the socket for its live todo list. Add routes here,
-//// or create more controllers and register them in `src/{{.Name}}.gleam`.
+//// The home page, served at `/` by `home_controller.gleam`. The todo list
+//// is a live component mounted from the socket that controller serves.
 
-import gleam/http
-import gloo/repo.{type Repo}
 import howdy/controller
 import howdy/ui
 import howdy/ui/live
-import howdy/ui/theme
 import lustre/attribute as a
 import lustre/element.{text}
 import lustre/element/html as h
 import {{.Name}}/layouts/default_layout
-import {{.Name}}/features/site/todo_list
 
-pub fn controller(db: Repo) {
-  controller.new("")
-  |> controller.get("/", home)
-  |> controller.route(http.Head, "/", home)
-  |> controller.get("/live/todos", fn(ctx) {
-    live.serve(ctx, todo_list.app(db), with: Nil)
-  })
-}
-
-/// Serves the Howdy UI stylesheet during `gleam dev`, so theme changes show
-/// up without a build step. `gleam run` serves the published copy from
-/// `priv/public/assets/ui.css`; regenerate it with `gleam run -m tasks/css`.
-pub fn stylesheet() {
-  ui.stylesheet(at: "/assets/ui.css", themes: theme.default_themes())
-}
-
-fn home(ctx: controller.Context) {
+pub fn show(ctx: controller.Context) {
   default_layout.render_live(ctx, "{{.Title}}", [
     ui.h1("Howdy, {{.Title}}!"),
     ui.p([
@@ -48,7 +28,13 @@ fn home(ctx: controller.Context) {
       ui.h2("Where things are"),
       h.ul([a.class("home-list")], [
         h.li([], [
-          h.code([], [text("src/{{.Name}}/features/site/todo_list.gleam")]),
+          h.code([], [text("src/{{.Name}}/features/home/pages/index.gleam")]),
+          text(" renders this page, and "),
+          h.code([], [
+            text(
+              "src/{{.Name}}/features/home/components/todo_list_live_component.gleam",
+            ),
+          ]),
           text(" is the live todo list above."),
         ]),
         h.li([], [

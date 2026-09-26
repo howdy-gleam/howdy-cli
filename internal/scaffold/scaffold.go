@@ -2,6 +2,7 @@
 package scaffold
 
 import (
+	_ "embed"
 	"errors"
 	"fmt"
 	"os"
@@ -99,7 +100,7 @@ var reserved = map[string]bool{
 	"howdy_admin": true, "howdy_telemetry": true, "howdy_auth": true,
 	"howdy_mail": true, "gsh": true, "console": true, "lustre": true,
 	"sketch": true, "ewe": true, "logging": true, "dot_env": true,
-	"gleeunit": true, "gloo": true, "tasks": true, "site": true, "todos": true,
+	"gleeunit": true, "gloo": true, "tasks": true, "home": true, "todos": true,
 	"support": true, "pog": true,
 }
 
@@ -147,8 +148,33 @@ func ValidateName(name string) error {
 	case reserved[name]:
 		return fmt.Errorf("%q is reserved by Gleam or Howdy; pick another name", name)
 	}
+	for _, module := range []string{name, name + "_test", name + "_dev", name + "_test_ffi"} {
+		if erlangModules[module] {
+			return fmt.Errorf("%q is not a valid project name: the project's %s module would replace Erlang's own %s module; pick another name", name, module, module)
+		}
+	}
 	return nil
 }
+
+// erlangModules are the modules that ship with Erlang/OTP. A project's
+// top-level modules (src/<name>.gleam, test/<name>_test.gleam and so on)
+// compile to Erlang modules of the same name, so they must not be one of
+// these. Modules under src/<name>/ are prefixed with the project name and
+// cannot clash. Regenerate erlang_modules.txt from a new OTP release with:
+//
+//	ls "$(erl -noshell -eval 'io:put_chars(code:root_dir()), halt().')"/lib/*/ebin/*.beam |
+//		xargs -n1 basename | sed 's/\.beam$//' | grep -E '^[a-z][a-z0-9_]*$' | sort -u
+//
+//go:embed erlang_modules.txt
+var erlangModuleList string
+
+var erlangModules = func() map[string]bool {
+	modules := map[string]bool{}
+	for _, module := range strings.Fields(erlangModuleList) {
+		modules[module] = true
+	}
+	return modules
+}()
 
 // Display is the project directory as the user typed it.
 func (p *Project) Display() string {

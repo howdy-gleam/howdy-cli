@@ -31,7 +31,7 @@ import howdy/telemetry/recorder
 import {{.Name}}
 import {{.Name}}/platform/database
 {{- if not .API}}
-import {{.Name}}/features/site/site_controller as site
+import {{.Name}}/features/home/home_controller as home
 {{- end}}
 
 pub fn main() -> Nil {
@@ -60,7 +60,7 @@ pub fn main() -> Nil {
     dev.new(fn() {
       {{.Name}}.configured(services)
 {{- if not .API}}
-      |> howdy.controller(site.stylesheet())
+      |> howdy.controller(home.stylesheet())
 {{- end}}
 {{- if .Full}}
       |> admin.mount(dashboard)

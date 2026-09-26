@@ -106,7 +106,7 @@ func flag(on bool) string {
 // static files and the stylesheet task.
 func uiOnly(path, name string) bool {
 	for _, prefix := range []string{
-		"src/" + name + "/features/site/", "test/" + name + "/features/site/", "src/" + name + "/layouts/", "priv/",
+		"src/" + name + "/features/home/", "test/" + name + "/features/home/", "src/" + name + "/layouts/", "priv/",
 	} {
 		if strings.HasPrefix(path, prefix) {
 			return true

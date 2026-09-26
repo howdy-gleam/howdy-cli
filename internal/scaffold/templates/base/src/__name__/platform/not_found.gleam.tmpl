@@ -1,7 +1,7 @@
 //// The 404 page for people, JSON for everything else. Every route's answer
 //// passes through `middleware`: when it is a 404 carrying Howdy's JSON
 //// error, or nothing, and the request comes from a browser that prefers
-//// HTML, the visitor gets `features/site/pages/not_found_page.gleam` instead. API
+//// HTML, the visitor gets `features/home/pages/not_found_page.gleam` instead. API
 //// clients, `fetch` and curl keep the JSON, and a 404 page a controller
 //// rendered itself is left as it is.
 
@@ -13,7 +13,7 @@ import gleam/list
 import gleam/result
 import gleam/string
 import howdy/controller.{type Context, type Next}
-import {{.Name}}/features/site/pages/not_found_page
+import {{.Name}}/features/home/pages/not_found_page
 
 pub fn middleware(ctx: Context, next: Next) {
   let res = next(ctx)
