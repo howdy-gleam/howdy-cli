@@ -1,13 +1,13 @@
-//// Test helpers: every test gets the migrated test database with its tables
-//// emptied and ids restarted. Tests run one at a time, so they can share it.
+//// Test helpers: every test gets the test database freshly migrated, with
+//// nothing left from the one before. Tests run one at a time, so they can
+//// share it.
 ////
 //// The database is `TEST_DATABASE_URL`, by default the {{.Name}}_test database
 //// that `docker compose up -d` creates. Never point it at data you care
-//// about: every table in the public schema is truncated.
+//// about: its public schema is dropped and made again before every test.
 
 import dot_env/env
-import gleam/dynamic/decode
-import gleam/string
+import gleam/result
 import gloo/repo.{type Repo}
 import {{.Name}}
 import {{.Name}}/platform/database
@@ -21,8 +21,8 @@ pub fn with_db(run_test: fn(Repo) -> a) -> a {
     let _ = repo.close(db)
     Nil
   })
+  let assert Ok(_) = reset(db)
   let assert Ok(_) = database.migrate(db)
-  let assert Ok(_) = empty(db)
   run_test(db)
 }
 
@@ -40,24 +40,12 @@ fn connect() -> Repo {
   }
 }
 
-fn empty(db: Repo) {
-  let assert Ok(tables) =
-    repo.all(
-      db,
-      "SELECT quote_ident(tablename) FROM pg_tables
-       WHERE schemaname = 'public' AND tablename <> 'schema_migrations'",
-      [],
-      decode.at([0], decode.string),
-    )
-  case tables {
-    [] -> Ok(0)
-    _ ->
-      repo.execute(
-        db,
-        "TRUNCATE " <> string.join(tables, ", ") <> " RESTART IDENTITY CASCADE",
-        [],
-      )
-  }
+/// Drops everything the last test left, rather than emptying the tables:
+/// Howdy packages such as auth and flags keep their migrations in the
+/// database and seed rows as they migrate, which emptied tables would lose.
+fn reset(db: Repo) {
+  use _ <- result.try(repo.execute(db, "DROP SCHEMA IF EXISTS public CASCADE", []))
+  repo.execute(db, "CREATE SCHEMA public", [])
 }
 
 /// The app as the tests see it, with the services it would get at startup.

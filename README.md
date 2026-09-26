@@ -373,6 +373,27 @@ finds the document in the app and lists every endpoint under API, where
 they can be called.
 
 ```sh
+howdy add flags
+```
+
+adds feature flags with `howdy_flags`. It needs the project's database, as
+the flags keep their settings there through `howdy_database`, and refuses a
+project without one. It writes:
+
+| File | Holds |
+| --- | --- |
+| `src/<project>/feature_flags.gleam` | the flags, with an example `early_access`, `all()`, and `start` and `migrate` |
+| `src/tasks/flags.gleam` | manages them from a terminal: `gleam run -m tasks/flags help` |
+| `test/<project>/feature_flags_test.gleam` | turns the example on for one user |
+
+The running flags are `features` in the services, started in `main`, the
+dev server and the test support, and `platform/database.gleam`'s `migrate`
+runs their migrations after the app's own. With the dev admin, `/_howdy`
+gets Flags: kill switches, rules, groups and history. Check a flag with
+`flags.enabled(services.features, feature_flags.early_access(), for:
+flags.user(id))`.
+
+```sh
 howdy create email password_reset
 ```
 
@@ -400,7 +421,7 @@ go install .
 main.go
 internal/
 ├── cli/        cobra commands (root, new, create, add, dev)
-├── generate/   `howdy create controller`, `pages`, `repo`, `migration`, `page`, `live_page`, `layout`, `component`, `live_component` and `email`, and `howdy add mail`, `auth`, `remote` and `openapi`: templates and wiring
+├── generate/   `howdy create controller`, `pages`, `repo`, `migration`, `page`, `live_page`, `layout`, `component`, `live_component` and `email`, and `howdy add mail`, `auth`, `remote`, `openapi` and `flags`: templates and wiring
 ├── scaffold/   project validation and template rendering
 │   └── templates/
 │       ├── base/      the page-only project, rendered with text/template

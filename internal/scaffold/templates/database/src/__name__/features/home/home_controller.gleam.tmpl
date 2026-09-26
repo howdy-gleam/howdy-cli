@@ -1,7 +1,6 @@
 //// The home page and the socket for its live todo list. Add routes here,
 //// or create more controllers and register them in `src/{{.Name}}.gleam`.
 
-import gleam/http
 import gloo/repo.{type Repo}
 import howdy/controller
 import howdy/ui
@@ -13,7 +12,6 @@ import {{.Name}}/features/home/pages/index
 pub fn controller(db: Repo) {
   controller.new("")
   |> controller.get("/", index.show)
-  |> controller.route(http.Head, "/", index.show)
   |> controller.get("/live/todos", fn(ctx) {
     live.serve(ctx, todo_list_live_component.app(db), with: Nil)
   })

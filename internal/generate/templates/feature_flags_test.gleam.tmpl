@@ -1,0 +1,17 @@
+import howdy/flags
+import {{.Name}}/feature_flags
+import {{.Name}}/support
+
+pub fn a_flag_is_off_until_it_is_turned_on_test() {
+  use db <- support.with_db()
+  let features = feature_flags.start(db)
+  let flag = feature_flags.early_access()
+  let someone = flags.user("42")
+  assert !flags.enabled(features, flag, for: someone)
+
+  let assert Ok(Nil) =
+    flags.allow(features, flags.key(flag), flags.User("42"), by: "test")
+  assert flags.enabled(features, flag, for: someone)
+  assert !flags.enabled(features, flag, for: flags.user("43"))
+  flags.stop(features)
+}

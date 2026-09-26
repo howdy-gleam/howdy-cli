@@ -1,0 +1,19 @@
+//// Manage the app's feature flags from the command line:
+//// `gleam run -m tasks/flags help`. `export` prints the flags the code
+//// defines as JSON without opening the database; every other command works
+//// on the database the app uses, through `.env` like the app, once it has
+//// been migrated (`gleam run -m tasks/migrate`).
+////
+//// Running nodes pick up a change at their next check, within two seconds.
+
+import howdy/flags/cli
+import howdy/flags/database as flags_database
+import {{.Name}}
+import {{.Name}}/feature_flags
+
+pub fn main() -> Nil {
+  {{.Name}}.load_environment()
+  cli.main(feature_flags.all(), fn() {
+    flags_database.store({{.Name}}.database())
+  })
+}

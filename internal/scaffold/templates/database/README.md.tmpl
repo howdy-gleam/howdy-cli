@@ -231,6 +231,15 @@ code emailed to the address, and roles. The app's services get `identity`
 and `permissions`; guard a controller with
 `controller.guarded("/account", auth.required(services.identity))`.
 
+## Feature flags
+
+`howdy add flags` adds Howdy Flags: flags defined in code, turned off at
+once, allowed for users and groups, and rolled out to a share of users while
+the app runs. The app's services get `features`; check a flag with
+`flags.enabled(services.features, feature_flags.early_access(), for:
+flags.user(id))`, and manage them {{if .Full}}in the admin or {{end}}with
+`gleam run -m tasks/flags`.
+
 ## Styles
 
 During `gleam dev` the Howdy UI stylesheet is generated on request. For

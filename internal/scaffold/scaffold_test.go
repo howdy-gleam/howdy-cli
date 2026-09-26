@@ -202,6 +202,12 @@ func TestPostgresOverlay(t *testing.T) {
 			t.Errorf("%s should contain %q", path, want)
 		}
 	}
+	// Emptying the tables would lose the migration records and seed rows
+	// that Howdy packages such as auth and flags keep in the database.
+	support := byPath["test/demo_site/support.gleam"]
+	if !strings.Contains(support, "DROP SCHEMA IF EXISTS public CASCADE") || strings.Contains(support, "TRUNCATE") {
+		t.Errorf("test support should drop and remake the schema before each test, not truncate its tables")
+	}
 }
 
 func TestParseRelease(t *testing.T) {

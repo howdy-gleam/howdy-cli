@@ -174,9 +174,9 @@ gleam test
 socket.
 {{- if eq .Database "sqlite"}} `test/{{.Name}}/support.gleam` gives each test a migrated
 in-memory database.
-{{- else if eq .Database "postgres"}} `test/{{.Name}}/support.gleam` gives each test the migrated
-`{{.Name}}_test` database with every table emptied, so never point
-`TEST_DATABASE_URL` at data you want to keep.
+{{- else if eq .Database "postgres"}} `test/{{.Name}}/support.gleam` gives each test the
+`{{.Name}}_test` database freshly migrated, dropping its public schema first,
+so never point `TEST_DATABASE_URL` at data you want to keep.
 {{- end}}
 
 ## Layout
@@ -246,6 +246,15 @@ another email.
 registration by a code emailed to the address, and roles. The app's
 services get `identity` and `permissions`; guard a controller with
 `controller.guarded("/account", auth.required(services.identity))`.
+
+## Feature flags
+
+`howdy add flags` adds Howdy Flags: flags defined in code, turned off at
+once, allowed for users and groups, and rolled out to a share of users while
+the app runs. The app's services get `features`; check a flag with
+`flags.enabled(services.features, feature_flags.early_access(), for:
+flags.user(id))`, and manage them {{if .Full}}in the admin or {{end}}with
+`gleam run -m tasks/flags`.
 {{- end}}
 
 ## Upgrading Howdy

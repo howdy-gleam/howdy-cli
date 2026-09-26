@@ -21,7 +21,142 @@ func addCommand() *cobra.Command {
 	cmd.AddCommand(addAuthCommand())
 	cmd.AddCommand(addRemoteCommand())
 	cmd.AddCommand(addOpenAPICommand())
+	cmd.AddCommand(addFlagsCommand())
 	return cmd
+}
+
+func addFlagsCommand() *cobra.Command {
+	var plain, skipDeps bool
+	cmd := &cobra.Command{
+		Use:   "flags",
+		Short: "Add feature flags with Howdy Flags, kept in the app's database and managed in the dev admin",
+		Long: `Add feature flags to the current project with Howdy Flags.
+
+Flags keep their settings in the app's database, so the project needs
+howdy_database: a project made without --no-database.
+
+It adds howdy_flags, from the same release as the project's other Howdy
+packages, to gleam.toml, then writes
+
+  src/<project>/feature_flags.gleam         the flags, an example early_access, and starting them
+  src/tasks/flags.gleam                     manages them: gleam run -m tasks/flags help
+  test/<project>/feature_flags_test.gleam   turns the example on for one user
+
+The app's services get features, started in main, the dev server and the
+test support, and platform/database.gleam runs the flags' migrations after
+the app's own. With the dev admin, /_howdy gets Flags: kill switches,
+rules, groups and history. Check a flag with
+flags.enabled(services.features, feature_flags.early_access(), for: flags.user(id)).`,
+		Example: "  howdy add flags",
+		Args:    cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runAddFlags(plain, skipDeps)
+		},
+	}
+	cmd.Flags().BoolVar(&skipDeps, "skip-deps", false, "do not run 'gleam deps download' after changing gleam.toml")
+	cmd.Flags().BoolVar(&plain, "plain", false, "print progress as plain lines instead of animating")
+	return cmd
+}
+
+func runAddFlags(plain, skipDeps bool) error {
+	dir, err := findProjectDir()
+	if err != nil {
+		return err
+	}
+	project, err := generate.Open(dir)
+	if err != nil {
+		return err
+	}
+	f, err := generate.NewFlags(project)
+	if err != nil {
+		return err
+	}
+
+	var gleam tools.Tool
+	var notes []string
+	steps := []tui.Step{
+		{
+			Title: "Checking for Gleam",
+			Run: func(r tui.Reporter) (string, error) {
+				var err error
+				gleam, err = tools.FindGleam()
+				return gleam.Version, err
+			},
+		},
+		{
+			Title: "Adding Howdy Flags",
+			Run: func(r tui.Reporter) (string, error) {
+				changed, err := f.Write()
+				for _, path := range changed {
+					r.Log(path)
+				}
+				if err != nil {
+					return "", err
+				}
+				return fmt.Sprintf("howdy_flags %s, %d files", f.Ref, len(changed)), nil
+			},
+		},
+		{
+			Title: "Wiring up the flags",
+			Run: func(r tui.Reporter) (string, error) {
+				notes = f.Register()
+				if len(notes) > 0 {
+					return "needs a hand, see below", nil
+				}
+				if f.Admin {
+					return "services, migrations, dev admin, tests", nil
+				}
+				return "services, migrations, tests", nil
+			},
+		},
+		{
+			Title: "Formatting Gleam sources",
+			Run: func(r tui.Reporter) (string, error) {
+				return "gleam format", gleam.Run(dir, "format", "src", "dev", "test")
+			},
+		},
+		{
+			Title: "Downloading dependencies",
+			Skip: func() (string, bool) {
+				if skipDeps {
+					return "skipped (--skip-deps)", true
+				}
+				return "", false
+			},
+			Run: func(r tui.Reporter) (string, error) {
+				r.Detail("gleam deps download")
+				if err := gleam.Run(dir, "deps", "download"); err != nil {
+					r.Warn("Dependency download failed; run 'gleam deps download' to see why.")
+					return "failed", nil
+				}
+				return "ready", nil
+			},
+		},
+	}
+	if err := tui.Run("howdy add flags", steps, plain); err != nil {
+		return err
+	}
+
+	for i, note := range notes {
+		notes[i] = "Needs a hand: " + note
+	}
+	if f.Admin {
+		notes = append(notes, "The admin at /_howdy manages the flags under Flags: kill switches, rules, groups and history.")
+	}
+	notes = append(notes,
+		fmt.Sprintf("Define flags in %s and add them to all(). Check one with", f.FlagsFile()),
+		"flags.enabled(services.features, feature_flags.early_access(), for: flags.user(id)).",
+	)
+	commands := []tui.Command{
+		{Cmd: "gleam run -m tasks/flags list", Note: "every flag and its state"},
+		{Cmd: "gleam run -m tasks/flags rollout early_access 5", Note: "turn it on for 5% of users"},
+		{Cmd: "gleam test", Note: "run the tests, including the flags'"},
+	}
+	if f.Admin {
+		commands = append([]tui.Command{{Cmd: "gleam dev", Note: "then open http://127.0.0.1:8787/_howdy/flags"}}, commands...)
+	}
+	fmt.Print(tui.NextSteps("flags", commands, notes))
+	return nil
 }
 
 func addRemoteCommand() *cobra.Command {

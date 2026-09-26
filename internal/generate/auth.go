@@ -165,23 +165,7 @@ func (a *Auth) Register() (notes []string) {
 
 	database := filepath.Join("src", p.Name, "platform", "database.gleam")
 	err = editFile(filepath.Join(p.Dir, database), func(text string) (string, error) {
-		const signature = "pub fn migrate(db: Repo) -> Result(Int, String) {"
-		if !strings.Contains(text, signature) {
-			return "", errors.New("no migrate function")
-		}
-		text = strings.Replace(text, signature, "fn migrate_app(db: Repo) -> Result(Int, String) {", 1)
-		text = strings.TrimRight(text, "\n") + `
-
-/// Apply the app's migrations, then auth's and those for roles, which
-/// howdy/migration keeps. The app, the dev server, the tests and
-/// ` + "`gleam run -m tasks/migrate`" + ` all migrate through here.
-pub fn migrate(db: Repo) -> Result(Int, String) {
-  use applied <- result.try(migrate_app(db))
-  use _ <- result.try(accounts.migrate(db))
-  Ok(applied)
-}
-`
-		return addImports(text, "import gleam/result", accounts), nil
+		return addPackageMigration(text, "accounts.migrate(db)", accounts)
 	})
 	if err != nil {
 		notes = append(notes, fmt.Sprintf("Run auth's migrations in %s: call accounts.migrate(db) after the app's own, before the app starts.", database))
@@ -224,4 +208,45 @@ pub fn migrate(db: Repo) -> Result(Int, String) {
 		}
 	}
 	return notes
+}
+
+const (
+	appMigrate     = "pub fn migrate(db: Repo) -> Result(Int, String) {"
+	appMigrateOnly = "fn migrate_app(db: Repo) -> Result(Int, String) {"
+)
+
+// addPackageMigration makes `migrate` in platform/database.gleam run a Howdy
+// package's migrations, through call, after the app's own. The first package
+// renames the app's `migrate` to `migrate_app` and wraps it; later ones join
+// the wrapper.
+func addPackageMigration(text, call string, imports ...string) (string, error) {
+	step := "  use _ <- result.try(" + call + ")\n"
+	if strings.Contains(text, appMigrateOnly) {
+		start := strings.Index(text, appMigrate)
+		if start < 0 {
+			return "", errors.New("no migrate function")
+		}
+		end := strings.Index(text[start:], "\n  Ok(applied)\n")
+		if end < 0 {
+			return "", errors.New("migrate does not end with Ok(applied)")
+		}
+		at := start + end + 1
+		text = text[:at] + step + text[at:]
+		return addImports(text, imports...), nil
+	}
+	if !strings.Contains(text, appMigrate) {
+		return "", errors.New("no migrate function")
+	}
+	text = strings.Replace(text, appMigrate, appMigrateOnly, 1)
+	text = strings.TrimRight(text, "\n") + `
+
+/// Apply the app's migrations, then those of the Howdy packages it uses,
+/// which howdy/migration keeps. The app, the dev server, the tests and
+/// ` + "`gleam run -m tasks/migrate`" + ` all migrate through here.
+pub fn migrate(db: Repo) -> Result(Int, String) {
+  use applied <- result.try(migrate_app(db))
+` + step + `  Ok(applied)
+}
+`
+	return addImports(text, append([]string{"import gleam/result"}, imports...)...), nil
 }

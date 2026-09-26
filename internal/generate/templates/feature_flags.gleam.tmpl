@@ -1,0 +1,54 @@
+//// Feature flags, with Howdy Flags. Define each flag here and add it to
+//// `all`; `main`, `dev/` and the tests start them as `features` in the
+//// app's services.
+////
+//// A flag is off until it is turned on, unless it is `on_by_default`, so
+//// it works in tests and on a fresh deployment. Its settings are kept in
+//// the app's database: a kill switch, users, organizations and groups it
+//// is allowed or blocked for, and a rollout to a share of users. Change
+//// them in the dev admin, with `gleam run -m tasks/flags`, or with the
+//// functions in `howdy/flags`. A controller checks one with:
+////
+////     case flags.enabled(features, feature_flags.early_access(), for: flags.user(id)) {
+////       True -> ...
+////       False -> ...
+////     }
+
+import gleam/result
+import gloo/repo.{type Repo}
+import howdy/flags
+import howdy/flags/database as flags_database
+import howdy/migration
+import howdy/service
+
+/// An example flag, for features still being tried out: allow it for a
+/// group of early users, then roll it out to everyone.
+pub fn early_access() -> flags.Flag {
+  flags.flag("early_access", description: "Features still being tried out")
+}
+
+/// Every flag the app defines: registered at startup, and listed by the
+/// admin and `gleam run -m tasks/flags`. Add new flags here.
+pub fn all() -> List(flags.Flag) {
+  [early_access()]
+}
+
+/// The app's flags, kept in its database and kept current from it: a
+/// change made on another node applies here within two seconds. Start them
+/// once at startup, after `migrate`.
+pub fn start(db: Repo) -> flags.Flags {
+  let assert Ok(store) = flags_database.store(db)
+    as "feature flags could not start: has the database been migrated?"
+  let assert Ok(features) =
+    flags.new(store) |> flags.register(all()) |> flags.start
+    as "feature flags could not start"
+  features
+}
+
+/// Create the flags' tables, or bring them up to date. They are named
+/// `howdy_flags_*`, and kept by `howdy/migration` beside the app's own
+/// migrations.
+pub fn migrate(db: Repo) -> Result(Nil, String) {
+  migration.run(db, [flags_database.schema()])
+  |> result.map_error(service.message)
+}
