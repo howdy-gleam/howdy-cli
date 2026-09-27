@@ -1,4 +1,0 @@
--module({{.Name}}_test_ffi).
--export([cleanup/2]).
-
-cleanup(After, Run) -> try Run() after After() end.

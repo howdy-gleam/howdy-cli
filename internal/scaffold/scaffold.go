@@ -104,7 +104,7 @@ var reserved = map[string]bool{
 	"howdy_mail": true, "gsh": true, "console": true, "lustre": true,
 	"sketch": true, "ewe": true, "logging": true, "dot_env": true,
 	"gleeunit": true, "gloo": true, "tasks": true, "home": true, "todos": true,
-	"support": true, "pog": true,
+	"support": true, "pog": true, "exception": true,
 }
 
 // New validates the name (or path ending in a name) and resolves the target
@@ -151,7 +151,7 @@ func ValidateName(name string) error {
 	case reserved[name]:
 		return fmt.Errorf("%q is reserved by Gleam or Howdy; pick another name", name)
 	}
-	for _, module := range []string{name, name + "_test", name + "_dev", name + "_test_ffi"} {
+	for _, module := range []string{name, name + "_test", name + "_dev"} {
 		if erlangModules[module] {
 			return fmt.Errorf("%q is not a valid project name: the project's %s module would replace Erlang's own %s module; pick another name", name, module, module)
 		}

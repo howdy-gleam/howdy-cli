@@ -1,5 +1,6 @@
 //// Test helpers: every test gets a fresh, migrated in-memory database.
 
+import exception
 import gloo/adapter/sqlite
 import gloo/repo.{type Repo}
 import {{.Name}}
@@ -8,7 +9,9 @@ import {{.Name}}/features/todos/todo_item
 
 pub fn with_db(run_test: fn(Repo) -> a) -> a {
   let assert Ok(db) = sqlite.start(sqlite.memory())
-  use <- cleanup(fn() {
+  // Close the database even when the test fails: a failed assertion
+  // crashes the test, so a plain call after it would not run.
+  use <- exception.defer(fn() {
     let _ = repo.close(db)
     Nil
   })
@@ -27,6 +30,3 @@ pub fn new_todo(title: String) -> todo_item.NewTodo {
   let assert Ok(input) = todo_item.validate(todo_item.TodoInput(title:))
   input
 }
-
-@external(erlang, "{{.Name}}_test_ffi", "cleanup")
-fn cleanup(after: fn() -> Nil, run: fn() -> a) -> a

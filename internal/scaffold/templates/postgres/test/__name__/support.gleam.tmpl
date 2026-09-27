@@ -7,6 +7,7 @@
 //// about: its public schema is dropped and made again before every test.
 
 import dot_env/env
+import exception
 import gleam/result
 import gloo/repo.{type Repo}
 import {{.Name}}
@@ -17,7 +18,9 @@ const default_url = "postgres://postgres:postgres@127.0.0.1:5432/{{.Name}}_test"
 
 pub fn with_db(run_test: fn(Repo) -> a) -> a {
   let db = connect()
-  use <- cleanup(fn() {
+  // Close the database even when the test fails: a failed assertion
+  // crashes the test, so a plain call after it would not run.
+  use <- exception.defer(fn() {
     let _ = repo.close(db)
     Nil
   })
@@ -59,6 +62,3 @@ pub fn new_todo(title: String) -> todo_item.NewTodo {
   let assert Ok(input) = todo_item.validate(todo_item.TodoInput(title:))
   input
 }
-
-@external(erlang, "{{.Name}}_test_ffi", "cleanup")
-fn cleanup(after: fn() -> Nil, run: fn() -> a) -> a

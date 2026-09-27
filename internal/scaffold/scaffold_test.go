@@ -16,7 +16,7 @@ func TestValidateName(t *testing.T) {
 	}
 	for _, bad := range []string{"", "MySite", "1site", "my-site", "gleam_thing", "test", "howdy", "type",
 		// Erlang/OTP modules, and a project whose test module would be one.
-		"pg", "lists", "json", "auth", "timer", "ct_property"} {
+		"pg", "lists", "json", "auth", "timer", "ct_property", "exception"} {
 		if err := ValidateName(bad); err == nil {
 			t.Errorf("%q should be rejected", bad)
 		}
@@ -123,7 +123,7 @@ func TestDatabaseOverlay(t *testing.T) {
 		"src/demo_site/features/todos/todo_item.gleam", "src/demo_site/features/todos/todos.gleam",
 		"src/demo_site/features/todos/todo_controller.gleam", "src/demo_site/features/home/components/todo_list_live_component.gleam",
 		"src/demo_site/migrations/create_todos.gleam", "src/demo_site/platform/database.gleam",
-		"src/tasks/migrate.gleam", "test/demo_site/support.gleam", "test/demo_site_test_ffi.erl",
+		"src/tasks/migrate.gleam", "test/demo_site/support.gleam",
 		"priv/public/assets/ui.css", "src/tasks/css.gleam",
 	} {
 		if _, ok := byPath[want]; !ok {
@@ -136,8 +136,12 @@ func TestDatabaseOverlay(t *testing.T) {
 	if !strings.Contains(byPath["src/demo_site.gleam"], "database.migrate") {
 		t.Error("the database composition root should override the base one")
 	}
-	if !strings.Contains(byPath["test/demo_site_test_ffi.erl"], "-module(demo_site_test_ffi)") {
-		t.Error("erlang ffi module should be named after the project")
+	if _, ok := byPath["test/demo_site_test_ffi.erl"]; ok {
+		t.Error("the tests should close the database with exception.defer, not an Erlang module")
+	}
+	if !strings.Contains(byPath["test/demo_site/support.gleam"], "use <- exception.defer(") ||
+		!strings.Contains(byPath["gleam.toml"], `exception = ">= 2.1.0 and < 3.0.0"`) {
+		t.Error("the tests should close the database with exception.defer, a dev dependency")
 	}
 	if _, ok := byPath["docker-compose.yml"]; ok {
 		t.Error("a SQLite project should not get a docker-compose.yml")
