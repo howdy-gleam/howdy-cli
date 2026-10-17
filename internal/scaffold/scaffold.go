@@ -104,7 +104,7 @@ var reserved = map[string]bool{
 	"howdy_mail": true, "gsh": true, "console": true, "lustre": true,
 	"sketch": true, "ewe": true, "logging": true, "dot_env": true,
 	"gleeunit": true, "gloo": true, "tasks": true, "home": true, "todos": true,
-	"support": true, "pog": true, "exception": true,
+	"support": true, "pog": true,
 }
 
 // New validates the name (or path ending in a name) and resolves the target

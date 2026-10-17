@@ -464,6 +464,51 @@ shows the output of the ones that fail and the compiler's warnings, and
 exits with status 1 if any failed; `--fix` formats instead of checking the
 formatting. Both take `--json`.
 
+## Upgrading
+
+```sh
+howdy upgrade
+```
+
+replaces the running `howdy` with the latest release from
+[GitHub Releases](https://github.com/mikeyjones/howdy_cli/releases): it
+downloads the build for your platform, checks it against the release's
+`checksums.txt` and swaps it in place. Nothing changes when `howdy` is
+already up to date.
+
+- `howdy upgrade --check` only reports whether a newer release is out.
+- `howdy upgrade --version 1.2.0` installs that release, older or newer.
+- `howdy upgrade --force` reinstalls, and replaces a development build
+  (`howdy --version` says `dev`), which otherwise has no version to compare.
+- `--json` prints the current and target versions and whether it upgraded.
+
+If `howdy` is installed somewhere you cannot write to, such as
+`/usr/local/bin`, run it with `sudo`. Set `GITHUB_TOKEN` if GitHub rate
+limits the lookup. Pre-releases (tags such as `v1.3.0-rc.1`) are never
+picked as the latest; install one with `--version`.
+
+## Releasing
+
+Push a version tag:
+
+```sh
+git tag v1.3.0
+git push origin v1.3.0
+```
+
+`.github/workflows/release.yml` runs [GoReleaser](https://goreleaser.com)
+(`.goreleaser.yaml`), which runs the tests, builds `howdy` for Linux, macOS
+and Windows on amd64 and arm64 with `cli.Version` set from the tag, and
+publishes a GitHub release with an archive per platform
+(`howdy_<os>_<arch>.tar.gz`, `.zip` on Windows) and `checksums.txt`.
+`howdy upgrade` relies on those names (`upgrade.ArchiveName`) and on the
+repository in `upgrade.Repo`, `mikeyjones/howdy_cli`. To try the build
+without publishing:
+
+```sh
+goreleaser release --snapshot --clean
+```
+
 ## Build
 
 Requires Go 1.25+.
@@ -484,7 +529,7 @@ go install .
 ```text
 main.go
 internal/
-├── cli/        cobra commands (root, new, create, add, dev, routes, check), and the --json and --dry-run output
+├── cli/        cobra commands (root, new, create, add, dev, routes, check, upgrade), and the --json and --dry-run output
 ├── generate/   `howdy create controller`, `pages`, `repo`, `migration`, `page`, `live_page`, `layout`, `component`, `live_component` and `email`, and `howdy add mail`, `auth`, `remote`, `openapi` and `flags`: templates and wiring
 ├── inspect/    reading a project's sources for `howdy routes`
 ├── scaffold/   project validation and template rendering
@@ -495,7 +540,8 @@ internal/
 │       ├── full/      files only a project without --minimal has
 │       └── api/       files only a project with --api-only has
 ├── tools/      finding and running gleam / erl
-└── tui/        Bubble Tea step runner and styles
+├── tui/        Bubble Tea step runner and styles
+└── upgrade/    `howdy upgrade`: finding, verifying and installing a GitHub release
 ```
 
 Templates mirror the generated project's layout. `__name__` in a path is

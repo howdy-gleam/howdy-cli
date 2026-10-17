@@ -31,6 +31,7 @@ func Execute() error {
 	root.AddCommand(devCommand())
 	root.AddCommand(routesCommand())
 	root.AddCommand(checkCommand())
+	root.AddCommand(upgradeCommand())
 
 	cmd, err := root.ExecuteC()
 	if err == nil {

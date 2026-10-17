@@ -1,0 +1,45 @@
+# Builds the releases that 'howdy upgrade' installs. The release workflow
+# (.github/workflows/release.yml) runs this when a v* tag is pushed.
+# The archive names must match upgrade.ArchiveName.
+version: 2
+
+project_name: howdy
+
+before:
+  hooks:
+    - go test ./...
+
+builds:
+  - binary: howdy
+    main: .
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags:
+      - -s -w -X howdy/internal/cli.Version={{.Version}}
+
+archives:
+  - name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files: [README.md]
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+changelog:
+  use: github
+  sort: asc
+  filters:
+    exclude:
+      - "^Merge "
+
+release:
+  # A tag such as v1.3.0-rc.1 is marked as a pre-release, which
+  # 'howdy upgrade' skips unless asked for it with --version.
+  prerelease: auto

@@ -120,3 +120,8 @@ func CheckLine(outcome Outcome, name, detail string) string {
 func Title(text string) string {
 	return styleTitle.Render("🤠 " + text)
 }
+
+// Detail renders secondary text, such as a path or a link under a title.
+func Detail(text string) string {
+	return styleDetail.Render(text)
+}

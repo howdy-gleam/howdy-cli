@@ -16,7 +16,7 @@ func TestValidateName(t *testing.T) {
 	}
 	for _, bad := range []string{"", "MySite", "1site", "my-site", "gleam_thing", "test", "howdy", "type",
 		// Erlang/OTP modules, and a project whose test module would be one.
-		"pg", "lists", "json", "auth", "timer", "ct_property", "exception"} {
+		"pg", "lists", "json", "auth", "timer", "ct_property"} {
 		if err := ValidateName(bad); err == nil {
 			t.Errorf("%q should be rejected", bad)
 		}
@@ -137,11 +137,10 @@ func TestDatabaseOverlay(t *testing.T) {
 		t.Error("the database composition root should override the base one")
 	}
 	if _, ok := byPath["test/demo_site_test_ffi.erl"]; ok {
-		t.Error("the tests should close the database with exception.defer, not an Erlang module")
+		t.Error("the tests should close the database with howdy/testing.cleanup, not an Erlang module")
 	}
-	if !strings.Contains(byPath["test/demo_site/support.gleam"], "use <- exception.defer(") ||
-		!strings.Contains(byPath["gleam.toml"], `exception = ">= 2.1.0 and < 3.0.0"`) {
-		t.Error("the tests should close the database with exception.defer, a dev dependency")
+	if !strings.Contains(byPath["test/demo_site/support.gleam"], "use <- testing.cleanup(") {
+		t.Error("the tests should close the database with howdy/testing.cleanup")
 	}
 	if _, ok := byPath["docker-compose.yml"]; ok {
 		t.Error("a SQLite project should not get a docker-compose.yml")

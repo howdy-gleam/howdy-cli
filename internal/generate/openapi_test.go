@@ -109,7 +109,7 @@ func TestAddOpenAPIUnknownShape(t *testing.T) {
 	p := scaffolded(t, scaffold.NoDatabase, false)
 	root := filepath.Join(p.Dir, "src", "demo_site.gleam")
 	src, _ := os.ReadFile(root)
-	changed := strings.Replace(string(src), `|> howdy.controller(static.serve("/", from: "priv/public"))`, "", 1)
+	changed := strings.Replace(string(src), `|> howdy.controller(static.serve("/", from: public_directory()))`, "", 1)
 	os.WriteFile(root, []byte(changed), 0o644)
 	o, err := NewOpenAPI(p)
 	if err != nil {

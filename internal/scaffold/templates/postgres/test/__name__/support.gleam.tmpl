@@ -7,9 +7,9 @@
 //// about: its public schema is dropped and made again before every test.
 
 import dot_env/env
-import exception
 import gleam/result
 import gloo/repo.{type Repo}
+import howdy/testing
 import {{.Name}}
 import {{.Name}}/platform/database
 import {{.Name}}/features/todos/todo_item
@@ -20,10 +20,7 @@ pub fn with_db(run_test: fn(Repo) -> a) -> a {
   let db = connect()
   // Close the database even when the test fails: a failed assertion
   // crashes the test, so a plain call after it would not run.
-  use <- exception.defer(fn() {
-    let _ = repo.close(db)
-    Nil
-  })
+  use <- testing.cleanup(fn() { repo.close(db) })
   let assert Ok(_) = reset(db)
   let assert Ok(_) = database.migrate(db)
   run_test(db)

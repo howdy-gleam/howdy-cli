@@ -6,6 +6,9 @@
 
 import dot_env
 import dot_env/env
+{{- if not .API}}
+import gleam/erlang/application
+{{- end}}
 import gleam/erlang/process
 import gloo/repo.{type Repo}
 import howdy
@@ -54,11 +57,25 @@ pub fn app(services: Services) -> howdy.App {
 {{- else}}
   |> howdy.controller(home.controller(db))
   // The root static controller is a catch-all, so mount it last.
-  |> howdy.controller(static.serve("/", from: "priv/public"))
+  |> howdy.controller(static.serve("/", from: public_directory()))
   // People get the 404 page, API clients JSON: see platform/not_found.gleam.
   |> howdy.middleware(not_found.middleware)
 {{- end}}
 }
+
+{{- if not .API}}
+
+/// The files served from the site root: the app's `priv/public`, found
+/// through the application rather than the working directory, so they are
+/// served wherever the app starts from, such as a release made by
+/// `gleam export erlang-shipment`.
+pub fn public_directory() -> String {
+  case application.priv_directory("{{.Name}}") {
+    Ok(priv) -> priv <> "/public"
+    Error(Nil) -> "priv/public"
+  }
+}
+{{- end}}
 
 /// Configure logging and load `.env` from the working directory. Call once
 /// at startup. Set `DOT_ENV_PATH` to read a different file.
@@ -106,13 +123,16 @@ pub fn start_telemetry() -> Nil {
 }
 {{- end}}
 
-/// The app with request logging, bound to localhost on `PORT`.
+/// The app with request logging, listening on `HOST` and `PORT`. `HOST` is
+/// `127.0.0.1` unless set, so only this machine can connect; in a
+/// container, set it to `0.0.0.0` so the platform's proxy can reach the app.
 pub fn configured(services: Services) -> howdy.App {
+  let host = env.get_string_or("HOST", "127.0.0.1")
   let port = env.get_int_or("PORT", 8787)
   let assert True = port > 0 && port <= 65_535 as "PORT must be 1-65535"
   app(services)
   |> howdy.middleware(logger.log)
-  |> howdy.bind("127.0.0.1")
+  |> howdy.bind(host)
   |> howdy.listening(port)
 }
 
