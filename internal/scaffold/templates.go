@@ -36,7 +36,7 @@ func (p *Project) Files() ([]File, error) {
 		"Title": p.Title,
 		// "sqlite", "postgres" or "" for small differences within a file.
 		"Database": string(p.Database),
-		// The Howdy release, such as "2.0.0", for its tag "v2.0.0".
+		// The Howdy release, such as "2.1.0", for its tag "v2.1.0".
 		"Release": p.Release,
 		// "true" unless --minimal: the admin, telemetry and console.
 		"Full": flag(!p.Minimal),
