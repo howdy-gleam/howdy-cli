@@ -471,7 +471,7 @@ howdy upgrade
 ```
 
 replaces the running `howdy` with the latest release from
-[GitHub Releases](https://github.com/mikeyjones/howdy_cli/releases): it
+[GitHub Releases](https://github.com/howdy-gleam/howdy-cli/releases): it
 downloads the build for your platform, checks it against the release's
 `checksums.txt` and swaps it in place. Nothing changes when `howdy` is
 already up to date.
@@ -484,7 +484,7 @@ already up to date.
 
 If `howdy` is installed somewhere you cannot write to, such as
 `/usr/local/bin`, run it with `sudo`. Set `GITHUB_TOKEN` if GitHub rate
-limits the lookup. Pre-releases (tags such as `v1.3.0-rc.1`) are never
+limits the lookup, or if the repository is private. Pre-releases (tags such as `v1.3.0-rc.1`) are never
 picked as the latest; install one with `--version`.
 
 ## Releasing
@@ -502,7 +502,7 @@ and Windows on amd64 and arm64 with `cli.Version` set from the tag, and
 publishes a GitHub release with an archive per platform
 (`howdy_<os>_<arch>.tar.gz`, `.zip` on Windows) and `checksums.txt`.
 `howdy upgrade` relies on those names (`upgrade.ArchiveName`) and on the
-repository in `upgrade.Repo`, `mikeyjones/howdy_cli`. To try the build
+repository in `upgrade.Repo`, `howdy-gleam/howdy-cli`. To try the build
 without publishing:
 
 ```sh

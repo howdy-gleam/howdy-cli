@@ -30,7 +30,7 @@ import (
 
 // Repo is the GitHub repository whose releases howdy upgrades to. It can be
 // set at build time with -ldflags "-X howdy/internal/upgrade.Repo=owner/name".
-var Repo = "mikeyjones/howdy_cli"
+var Repo = "howdy-gleam/howdy-cli"
 
 // checksums is the name of the release asset holding the archives' SHA-256s.
 const checksums = "checksums.txt"
@@ -50,7 +50,11 @@ func (r Release) Version() string {
 // Asset is a file attached to a release.
 type Asset struct {
 	Name string `json:"name"`
-	URL  string `json:"browser_download_url"`
+	// URL is the asset's API endpoint rather than its browser download
+	// link: with an octet-stream Accept header it redirects to the file,
+	// and unlike the browser link it accepts GITHUB_TOKEN, so it also works
+	// for a private repository.
+	URL string `json:"url"`
 }
 
 func (r Release) asset(name string) (Asset, bool) {
