@@ -43,7 +43,7 @@ type Project struct {
 // against, and so the one new projects depend on unless told otherwise.
 // Update it with the templates when a Howdy release changes what a project
 // needs.
-const Release = "2.1.1"
+const Release = "2.1.2"
 
 var releasePattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+$`)
 

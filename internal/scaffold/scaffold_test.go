@@ -263,6 +263,46 @@ func TestProjectsDependOnOneRelease(t *testing.T) {
 	}
 }
 
+// Every project can be published to a hosting platform as it is made: it
+// listens on HOST, which a container sets to 0.0.0.0, and finds its public
+// files through the application, so an exported shipment started from
+// another directory still serves them.
+func TestProjectsRunInAContainer(t *testing.T) {
+	for _, api := range []bool{false, true} {
+		for _, db := range []Database{NoDatabase, SQLite, Postgres} {
+			label := db.Label()
+			if api {
+				label += ", API"
+			}
+			p, err := New(filepath.Join(t.TempDir(), "demo_site"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			p.Database, p.API = db, api
+			files, err := p.Files()
+			if err != nil {
+				t.Fatal(err)
+			}
+			byPath := map[string]string{}
+			for _, f := range files {
+				byPath[f.Path] = string(f.Content)
+			}
+			root := byPath["src/demo_site.gleam"]
+			for _, want := range []string{`env.get_string_or("HOST", "127.0.0.1")`, "howdy.bind(host)"} {
+				if !strings.Contains(root, want) {
+					t.Errorf("src/demo_site.gleam (%s) is missing %q", label, want)
+				}
+			}
+			if !api && !strings.Contains(root, `application.priv_directory("demo_site")`) {
+				t.Errorf("src/demo_site.gleam (%s) does not find priv/public through the application", label)
+			}
+			if !strings.Contains(byPath[".env.example"], "HOST=") {
+				t.Errorf(".env.example (%s) does not mention HOST", label)
+			}
+		}
+	}
+}
+
 // Every project gets the admin, telemetry and the console unless it is
 // made with --minimal, whichever database it uses.
 func TestFullProject(t *testing.T) {
