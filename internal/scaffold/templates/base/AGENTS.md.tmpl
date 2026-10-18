@@ -40,11 +40,13 @@ your task before starting:
 Run this after every change, and fix what it reports before moving on:
 
 ```sh
-howdy check          # gleam format --check, gleam build, gleam test
+howdy check          # gleam format --check, gleam build, deps, gleam test
 ```
 
 Add `--json` for a result you can parse. The steps on their own are
-`gleam format src test dev`, `gleam build` and `gleam test`.
+`gleam format src test dev`, `gleam build` and `gleam test`. `deps` fails
+when `src/` imports a package that only a dev dependency brings in:
+`gleam build` accepts it, but a production build leaves it out.
 {{- if eq .Database "postgres"}}
 The tests need PostgreSQL: start it with `docker compose up -d`.
 {{- end}}

@@ -92,17 +92,24 @@ func checkCommand() *cobra.Command {
 	var asJSON, fix bool
 	cmd := &cobra.Command{
 		Use:   "check",
-		Short: "Check the project: formatting, the build and the tests",
+		Short: "Check the project: formatting, the build, its dependencies and the tests",
 		Long: `Check the current project the way to check any change to it:
 
   format   gleam format --check, over src, test and dev
   build    gleam build, reporting the compiler's warnings
+  deps     every package src imports is in [dependencies] in gleam.toml
   test     gleam test
 
-Every check runs, except the tests when the build fails. The output of a
-check that fails is shown, and the command exits with status 1 if any did.
-Pass --fix to format the sources first, rather than report them, and
---json for one JSON object with each check's outcome and output.`,
+gleam build and gleam test compile with the dev dependencies, and so with
+the packages they bring in, such as howdy_flags with howdy_admin. A
+production build, such as gleam export erlang-shipment, leaves them out:
+deps finds an import in src of a module only they provide, and says what to
+add to gleam.toml.
+
+Every check runs, except deps and the tests when the build fails. The
+output of a check that fails is shown, and the command exits with status 1
+if any did. Pass --fix to format the sources first, rather than report
+them, and --json for one JSON object with each check's outcome and output.`,
 		Example: "  howdy check\n  howdy check --fix\n  howdy check --json",
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -186,8 +193,10 @@ func runCheck(asJSON, fix bool) error {
 	build := run("build", "build")
 	show(build)
 	if build.Status == "failed" {
+		show(checkResult{Name: "deps", Status: "skipped", Command: depsCommand})
 		show(checkResult{Name: "test", Status: "skipped", Command: "gleam test"})
 	} else {
+		show(checkDependencies(dir))
 		show(run("test", "test"))
 	}
 
@@ -215,6 +224,26 @@ func runCheck(asJSON, fix bool) error {
 		return fmt.Errorf("check failed: %s", strings.Join(failed, ", "))
 	}
 	return nil
+}
+
+const depsCommand = "src imports only from [dependencies]"
+
+// checkDependencies is the deps check: it fails on an import in src/ of a
+// module from a package that only the dev dependencies bring in.
+func checkDependencies(dir string) checkResult {
+	c := checkResult{Name: "deps", Command: depsCommand, Status: "passed"}
+	found, err := inspect.DevOnlyImports(dir)
+	if err != nil {
+		c.Status = "failed"
+		c.Output = err.Error()
+		return c
+	}
+	if len(found) == 0 {
+		return c
+	}
+	c.Status = "failed"
+	c.Output = inspect.DescribeDevOnlyImports(found)
+	return c
 }
 
 func indent(text, prefix string) string {

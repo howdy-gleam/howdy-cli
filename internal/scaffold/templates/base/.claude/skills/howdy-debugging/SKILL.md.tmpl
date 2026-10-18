@@ -16,6 +16,14 @@ compile error first: later ones often follow from it. The Gleam compiler's
 messages are precise; read the whole message, including the expected and
 found types. `howdy check --fix` settles formatting.
 
+**A failed `deps` check means production builds will fail.** `src/` imports
+a module from a package that is not in `[dependencies]` in `gleam.toml`,
+only brought in by a dev dependency{{if .Full}} (such as `howdy_flags` with
+`howdy_admin`){{end}}. `gleam build` and `gleam test` have the dev dependencies,
+so they pass, but `gleam export erlang-shipment` does not. Add the line the
+check gives to `[dependencies]`, on the same ref as the other Howdy
+packages.
+
 **`gleam dev` keeps serving the old code when a build fails.** It prints
 `howdy_dev: build failed, still serving the previous code`{{if not .API}} and shows the
 error over the page in the browser{{end}}, but a request with curl still works,

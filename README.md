@@ -452,17 +452,21 @@ Two commands describe a project:
 
 ```sh
 howdy routes         # every route: method, path, controller and file:line
-howdy check          # gleam format --check, gleam build, gleam test
+howdy check          # gleam format --check, gleam build, deps, gleam test
 ```
 
 `howdy routes` reads the sources rather than building the app: the
 controllers registered in `app()` in `src/<project>.gleam`, in order, and
 the routes each declares, with the mounts that packages serve (static
 files, auth, the OpenAPI document) and what `dev/` adds under `gleam dev`.
-`howdy check` runs every check, skipping the tests when the build fails,
-shows the output of the ones that fail and the compiler's warnings, and
-exits with status 1 if any failed; `--fix` formats instead of checking the
-formatting. Both take `--json`.
+`howdy check` runs every check, skipping `deps` and the tests when the
+build fails, shows the output of the ones that fail and the compiler's
+warnings, and exits with status 1 if any failed; `--fix` formats instead of
+checking the formatting. Both take `--json`. `deps` fails when `src/`
+imports a module from a package that only a dev dependency brings in, such
+as `howdy_flags` with `howdy_admin`: `gleam build` and `gleam test` have
+it, but a production build such as `gleam export erlang-shipment` does not.
+It says the line to add to `[dependencies]`.
 
 ## Upgrading
 
