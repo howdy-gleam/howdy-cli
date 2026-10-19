@@ -70,7 +70,7 @@ download them. No local Howdy checkout is needed.
 Projects depend on a Howdy release tag, never a branch, so every Howdy
 package in a project comes from the same release. By default that is the
 release this CLI's templates were written and tested against,
-`scaffold.Release` in `internal/scaffold/scaffold.go`. Pass `--howdy 2.1.0`
+`scaffold.Release` in `internal/scaffold/scaffold.go`. Pass `--howdy 1.0.0`
 to use another; a release the templates predate may need changes to the
 generated code. When a Howdy release changes what a project needs, update
 the templates and `scaffold.Release` together.

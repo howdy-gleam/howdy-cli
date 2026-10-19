@@ -69,7 +69,7 @@ Send with `|> testing.send(app)`, then read the response:
 | `testing.text(res)` | the body as a String |
 | `testing.json(res, decoder)` | the decoded JSON body |
 | `testing.error(res)` | the `"error"` message of an error response |
-| `testing.field_errors(res)` | the field errors of a 422 |
+| `testing.field_errors(res)` | the field errors of a 422, each `FieldError(field, problem)`: compare with `[service.FieldError("age", problem.TooSmall(13))]` |
 | `testing.cookies(res)` | cookies set, as `#(name, value)` |
 
 There is no helper for a POST without a body (`testing.request(http.Post, path)`),

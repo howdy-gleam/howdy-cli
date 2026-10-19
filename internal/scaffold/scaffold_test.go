@@ -231,7 +231,7 @@ func TestParseRelease(t *testing.T) {
 }
 
 // Every Howdy package in every kind of project comes from the chosen
-// release, and nothing is left on the v2 branch.
+// release, and nothing is left on a branch such as v1 or v2.
 func TestProjectsDependOnOneRelease(t *testing.T) {
 	for _, db := range []Database{NoDatabase, SQLite, Postgres} {
 		p, err := New(filepath.Join(t.TempDir(), "demo_site"))
@@ -246,8 +246,10 @@ func TestProjectsDependOnOneRelease(t *testing.T) {
 		}
 		for _, f := range files {
 			content := string(f.Content)
-			if strings.Contains(content, `ref = "v2"`) || strings.Contains(content, "ref `v2`") {
-				t.Errorf("%s (%s) still points at the v2 branch", f.Path, db.Label())
+			for _, branch := range []string{"v1", "v2"} {
+				if strings.Contains(content, `ref = "`+branch+`"`) || strings.Contains(content, "ref `"+branch+"`") {
+					t.Errorf("%s (%s) still points at the %s branch", f.Path, db.Label(), branch)
+				}
 			}
 			if f.Path == "gleam.toml" {
 				refs := strings.Count(content, `ref = "v2.3.1"`)
