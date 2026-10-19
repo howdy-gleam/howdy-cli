@@ -65,7 +65,7 @@ underscores, starting with a letter. It cannot be the name of a module that
 ships with Erlang, such as pg, auth or timer, which the project's own module
 would replace. A path such as apps/my_site also works; the last segment is the
 project name.`,
-		Example: "  howdy new my_site\n  howdy new my_site --database postgres\n  howdy new my_site --no-database\n  howdy new my_site --minimal\n  howdy new my_api --api-only\n  howdy new my_site --no-agents\n  howdy new my_site --howdy 2.1.0\n  howdy new apps/my_site\n  howdy new my_site --dry-run --json",
+		Example: "  howdy new my_site\n  howdy new my_site --database postgres\n  howdy new my_site --no-database\n  howdy new my_site --minimal\n  howdy new my_api --api-only\n  howdy new my_site --no-agents\n  howdy new my_site --howdy 1.0.0\n  howdy new apps/my_site\n  howdy new my_site --dry-run --json",
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if opts.noDatabase && cmd.Flags().Changed("database") {

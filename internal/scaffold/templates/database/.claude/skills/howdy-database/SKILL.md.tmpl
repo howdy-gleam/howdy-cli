@@ -20,6 +20,9 @@ Where things are:
   validation, JSON codecs and Gloo table.
 - `src/{{.Name}}/features/<plural>/<plural>.gleam`: every query for it.
   Controllers{{if not .API}} and pages{{end}} call these functions; they never query directly.
+- `dev/{{.Name}}/factories/<singular>_factory.gleam`: valid records for
+  tests and seeds (see below).
+- `dev/seed.gleam`: the development data `howdy db seed` inserts.
 
 ## Rules
 
@@ -89,15 +92,36 @@ finds most misses, so run `gleam build` as you go.
    add a column to `index_page.gleam` and a row to `show_page.gleam`.
 6. **Tests**: add the field wherever the tests build a `UserInput(...)` or
    JSON body, and assert on it. Search for `UserInput(` and `User(` across
-   `src/` and `test/`.
+   `src/`, `test/` and `dev/`, and give the factory's `input()` a valid value.
 {{- else}}
 5. **Tests**: add the field wherever the tests build a `UserInput(...)` or
    JSON body, and assert on it. Search for `UserInput(` and `User(` across
-   `src/` and `test/`.
+   `src/`, `test/` and `dev/`, and give the factory's `input()` a valid value.
 {{- end}}
 
 Then `howdy check`. Renaming or dropping a column is the same walk in
 reverse, with `migration.rename_column` or `migration.drop_column`.
+
+## Test data and seeds
+
+Every record `howdy create` makes gets a factory in
+`dev/{{.Name}}/factories/`. `input()` is input that passes validation, with
+strings numbered so no two are the same; `insert` validates and inserts it,
+crashing on failure; `insert_many` inserts several:
+
+```gleam
+import {{.Name}}/factories/user_factory
+import {{.Name}}/features/users/user.{UserInput}
+
+let ada = user_factory.insert(db, UserInput(..user_factory.input(), name: "Ada"))
+let others = user_factory.insert_many(db, 3, fn(input) { input })
+```
+
+Use them in tests rather than writing insert helpers, and keep `input()`
+passing the rules in `validate`. `dev/seed.gleam` calls them in `seed` to
+fill the development database: `howdy db seed` migrates and runs it, and
+seeding twice inserts twice, so `howdy db seed --reset` drops every table
+first. Code in `dev/` never ships, so `src/` cannot import it.
 
 ## Writing a query
 

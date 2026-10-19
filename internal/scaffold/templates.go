@@ -36,7 +36,7 @@ func (p *Project) Files() ([]File, error) {
 		"Title": p.Title,
 		// "sqlite", "postgres" or "" for small differences within a file.
 		"Database": string(p.Database),
-		// The Howdy release, such as "2.1.0", for its tag "v2.1.0".
+		// The Howdy release, such as "1.0.0", for its tag "v1.0.0".
 		"Release": p.Release,
 		// "true" unless --minimal: the admin, telemetry and console.
 		"Full": flag(!p.Minimal),
@@ -44,6 +44,9 @@ func (p *Project) Files() ([]File, error) {
 		"API": flag(p.API),
 		// The layout a layout template is rendered as; "default" here.
 		"Layout": "default",
+		// "true" when the todo list example is there for dev/seed.gleam to
+		// seed; see SeedFiles.
+		"Todos": flag(p.Database != NoDatabase),
 	}
 	sets := []string{"templates/base"}
 	if p.Database != NoDatabase {
@@ -91,6 +94,33 @@ func Layout(name, layout string) ([]byte, error) {
 	var out bytes.Buffer
 	err = tmpl.Execute(&out, map[string]string{"Name": name, "Title": title(name), "Layout": layout})
 	return out.Bytes(), err
+}
+
+// seedTemplates are the files 'howdy db seed' runs, by project path.
+var seedTemplates = []string{"dev/seed.gleam", "dev/seed/reset.gleam"}
+
+// SeedFiles renders dev/seed.gleam and dev/seed/reset.gleam for the project
+// name and database, without the todo list example, for 'howdy db seed' to
+// add to a project made before 'howdy new' wrote them.
+func SeedFiles(name string, database Database) ([]File, error) {
+	data := map[string]string{"Name": name, "Database": string(database), "Todos": ""}
+	var files []File
+	for _, path := range seedTemplates {
+		src, err := templates.ReadFile("templates/database/" + path + ".tmpl")
+		if err != nil {
+			return nil, err
+		}
+		tmpl, err := template.New(path).Option("missingkey=error").Parse(string(src))
+		if err != nil {
+			return nil, err
+		}
+		var out bytes.Buffer
+		if err := tmpl.Execute(&out, data); err != nil {
+			return nil, fmt.Errorf("template %s: %w", path, err)
+		}
+		files = append(files, File{Path: path, Content: out.Bytes()})
+	}
+	return files, nil
 }
 
 // flag is a template value that is true when it is not empty.

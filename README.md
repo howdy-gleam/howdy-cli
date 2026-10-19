@@ -70,7 +70,7 @@ download them. No local Howdy checkout is needed.
 Projects depend on a Howdy release tag, never a branch, so every Howdy
 package in a project comes from the same release. By default that is the
 release this CLI's templates were written and tested against,
-`scaffold.Release` in `internal/scaffold/scaffold.go`. Pass `--howdy 2.1.0`
+`scaffold.Release` in `internal/scaffold/scaffold.go`. Pass `--howdy 1.0.0`
 to use another; a release the templates predate may need changes to the
 generated code. When a Howdy release changes what a project needs, update
 the templates and `scaffold.Release` together.
@@ -109,7 +109,9 @@ module; the second (singular) names the record module and type. Fields are
 is a string, and every record gets an integer `id`. The command also writes
 `migrations/create_users.gleam` with the next migration version and tests
 in `test/<project>/features/users/` (`users_test.gleam` for the database operations,
-`users_controller_test.gleam` for the routes), registers the controller
+`users_controller_test.gleam` for the routes), a factory in
+`dev/<project>/factories/user_factory.gleam` (see
+[Test data and seeds](#test-data-and-seeds)), registers the controller
 in `src/<project>.gleam` and the migration in `platform/database.gleam`,
 and runs `gleam format`. If either of those two files no longer has the
 shape `howdy new` gave it, it is left alone and the command prints what to
@@ -200,6 +202,43 @@ howdy create live_page blog editor
 does the same with a live section on the page: a Lustre server component
 with its model, update and view in the page module, and its WebSocket
 routed at `/blog/editor/live`.
+
+## Test data and seeds
+
+Every record `howdy create controller`, `pages` and `repo` make gets a
+factory in `dev/<project>/factories/`, beside the `gleam dev` entry point.
+Code in `dev/` can be imported by tests and run with `gleam run -m`, but
+`gleam run` and `gleam export erlang-shipment` leave it out, so test data
+never ships:
+
+```gleam
+import my_app/factories/user_factory
+import my_app/features/users/user.{UserInput}
+
+let ada = user_factory.insert(db, UserInput(..user_factory.input(), name: "Ada"))
+let others = user_factory.insert_many(db, 3, fn(input) { input })
+```
+
+`input()` is input that passes the record's validation, with strings
+numbered (`"Name 1"`, `"Name 2"`) so values in unique columns stay apart;
+change fields with Gleam's record update syntax. `insert` validates the
+input and inserts it through the feature's `create`, crashing if either
+fails, and `insert_many` inserts several, each changed by the function.
+Edit `input()` when you add validation rules the samples break.
+
+```sh
+howdy db seed
+howdy db seed --reset
+```
+
+migrates the database `.env` names and runs `dev/seed.gleam`, whose `seed`
+function inserts the records to start with; new projects seed a few todos.
+Seeding again inserts them again, so `--reset` drops every table first
+(on PostgreSQL, the `public` schema), then migrates and seeds. It deletes
+everything in that database, so never point `.env` at data you want to
+keep. A project made before `howdy db seed` existed gets `dev/seed.gleam`
+and `dev/seed/reset.gleam` the first time it runs. `howdy db migrate`
+applies pending migrations without seeding, like `gleam run -m tasks/migrate`.
 
 ## Layouts
 
@@ -533,7 +572,7 @@ go install .
 ```text
 main.go
 internal/
-├── cli/        cobra commands (root, new, create, add, dev, routes, check, upgrade), and the --json and --dry-run output
+├── cli/        cobra commands (root, new, create, add, dev, db, routes, check, upgrade), and the --json and --dry-run output
 ├── generate/   `howdy create controller`, `pages`, `repo`, `migration`, `page`, `live_page`, `layout`, `component`, `live_component` and `email`, and `howdy add mail`, `auth`, `remote`, `openapi` and `flags`: templates and wiring
 ├── inspect/    reading a project's sources for `howdy routes`
 ├── scaffold/   project validation and template rendering

@@ -119,6 +119,15 @@ func (f Field) sample(changed bool) string {
 func (f Field) SampleGleam() string  { return unwrap(f.Sample()) }
 func (f Field) ChangedGleam() string { return unwrap(f.Changed()) }
 
+// FactoryGleam is the value a factory gives the field: the sample, with
+// strings numbered by the variable n so that no two are the same.
+func (f Field) FactoryGleam(n string) string {
+	if f.Kind == String {
+		return fmt.Sprintf("%q <> %s", f.Label()+" ", n)
+	}
+	return f.SampleGleam()
+}
+
 func pick(first bool, a, b string) string {
 	if first {
 		return a

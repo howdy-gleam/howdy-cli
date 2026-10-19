@@ -106,6 +106,14 @@ refresh after every command.
 at startup; for production you may prefer to run `gleam run -m tasks/migrate`
 separately and remove that line from `main`.
 
+### Example data
+
+`howdy db seed` migrates the database and runs `dev/seed.gleam`, which
+inserts records through the factories in `dev/{{.Name}}/factories/`, the
+same ones the tests can use. Seeding again adds the records again;
+`howdy db seed --reset` drops every table first, so never run it against
+data you want to keep.
+
 ## Configuration
 
 Configuration is read from the environment, with `.env` in the working

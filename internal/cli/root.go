@@ -29,6 +29,7 @@ func Execute() error {
 	root.AddCommand(createCommand())
 	root.AddCommand(addCommand())
 	root.AddCommand(devCommand())
+	root.AddCommand(dbCommand())
 	root.AddCommand(routesCommand())
 	root.AddCommand(checkCommand())
 	root.AddCommand(upgradeCommand())

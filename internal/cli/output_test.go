@@ -83,6 +83,7 @@ func TestDryRunWritesNothing(t *testing.T) {
 	wantCreated := map[string]bool{
 		"src/demo_site/features/users/user.gleam":                   true,
 		"src/demo_site/features/users/users.gleam":                  true,
+		"dev/demo_site/factories/user_factory.gleam":                true,
 		"src/demo_site/features/users/users_controller.gleam":       true,
 		"src/demo_site/migrations/create_users.gleam":               true,
 		"test/demo_site/features/users/users_test.gleam":            true,

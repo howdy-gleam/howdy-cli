@@ -335,6 +335,7 @@ func (c *Slice) Files() ([]File, error) {
 		targets = append(targets,
 			target{template: "record.gleam.tmpl", path: filepath.Join(slice, c.Singular+".gleam")},
 			target{template: "context.gleam.tmpl", path: filepath.Join(slice, c.Plural+".gleam")},
+			target{template: "factory.gleam.tmpl", path: c.FactoryPath()},
 		)
 	}
 	targets = append(targets, target{template: "migration.gleam.tmpl", path: filepath.Join("src", p.Name, "migrations", c.MigrationModule()+".gleam")})
@@ -412,6 +413,16 @@ func (c *Slice) Write() ([]string, error) {
 		written = append(written, "priv/public/assets/style.css")
 	}
 	return written, err
+}
+
+// FactoryModule is the factory's module name, e.g. "user_factory".
+func (c *Slice) FactoryModule() string { return c.Singular + "_factory" }
+
+// FactoryPath is where the factory goes, relative to the project directory:
+// under dev/, which tests and dev/seed.gleam can import but 'gleam run' and
+// deployments leave out.
+func (c *Slice) FactoryPath() string {
+	return filepath.Join("dev", c.Project.Name, "factories", c.FactoryModule()+".gleam")
 }
 
 // MigrationModule is the migration's module name, e.g. "create_users".

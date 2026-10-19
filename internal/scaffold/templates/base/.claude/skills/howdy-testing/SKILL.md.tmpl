@@ -94,6 +94,11 @@ or for HTML: check it with `string.contains(testing.text(res), "...")`.
     assert users.find_by_email(db, "ada@example.com") == Ok(created)
   }
   ```
+
+- Records a test only needs to exist: insert them with the record's factory
+  in `dev/{{.Name}}/factories/`, which validates them the same way:
+  `user_factory.insert(db, UserInput(..user_factory.input(), email: "ada@example.com"))`,
+  or `user_factory.insert_many(db, 3, fn(input) { input })`.
 {{- end}}
 {{- if not .API}}
 - Pages: status 200, `content-type` `text/html; charset=utf-8`, and text

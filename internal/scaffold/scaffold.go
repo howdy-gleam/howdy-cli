@@ -23,7 +23,7 @@ type Project struct {
 	// example todo list, or NoDatabase for a page-only project.
 	Database Database
 	// Release is the Howdy release the project depends on, such as
-	// "2.1.0": its packages come from the tag "v" + Release.
+	// "1.0.0": its packages come from the tag "v" + Release.
 	Release string
 	// Minimal leaves out the development admin, telemetry and the GSH
 	// console, which every project gets otherwise.
@@ -43,12 +43,12 @@ type Project struct {
 // against, and so the one new projects depend on unless told otherwise.
 // Update it with the templates when a Howdy release changes what a project
 // needs.
-const Release = "2.1.2"
+const Release = "1.0.0"
 
 var releasePattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+$`)
 
 // ParseRelease reads the value of the --howdy flag: a release such as
-// 2.1.0, with or without a leading v.
+// 1.0.0, with or without a leading v.
 func ParseRelease(s string) (string, error) {
 	release := strings.TrimPrefix(strings.TrimSpace(s), "v")
 	if !releasePattern.MatchString(release) {
