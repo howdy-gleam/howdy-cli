@@ -15,8 +15,9 @@ import (
 const AgentsFile = "AGENTS.md"
 
 // agentNotes are the sections 'howdy add' appends to AGENTS.md, keyed by
-// package, with "%[1]s" standing for the project name. Each starts with a
-// marker so it is added once.
+// package, with "%[1]s" standing for the project name. They are not format
+// strings: a note need not name the project. Each starts with a marker so
+// it is added once.
 var agentNotes = map[string]string{
 	"mail": `## Email
 
@@ -131,7 +132,7 @@ func (p *Project) NoteForAgents(pkg string) ([]string, error) {
 	var changed []string
 	marker := "<!-- howdy add " + pkg + " -->"
 	if text := string(src); !strings.Contains(text, marker) {
-		text = strings.TrimRight(text, "\n") + "\n\n" + marker + "\n" + fmt.Sprintf(note, p.Name)
+		text = strings.TrimRight(text, "\n") + "\n\n" + marker + "\n" + strings.ReplaceAll(note, "%[1]s", p.Name)
 		if err := os.WriteFile(path, []byte(text), 0o644); err != nil {
 			return nil, err
 		}
