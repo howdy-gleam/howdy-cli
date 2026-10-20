@@ -24,6 +24,7 @@ FROM ghcr.io/gleam-lang/gleam:${GLEAM_VERSION}-scratch AS gleam
 
 FROM erlang:${ERLANG_VERSION}-alpine AS build
 COPY --from=gleam /bin/gleam /bin/gleam
+{{- if eq .Source "git"}}
 {{- if .Database}}
 # Git fetches the Howdy packages; a C toolchain builds the native database
 # driver Gloo brings.
@@ -31,6 +32,10 @@ RUN apk add --no-cache git build-base
 {{- else}}
 # Git fetches the Howdy packages.
 RUN apk add --no-cache git
+{{- end}}
+{{- else if .Database}}
+# A C toolchain builds the native database driver Gloo brings.
+RUN apk add --no-cache build-base
 {{- end}}
 WORKDIR /build
 # Download the dependencies before copying the code, so a change to the

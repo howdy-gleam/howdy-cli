@@ -125,28 +125,30 @@ Before writing anything it checks that `gleam` is installed (and warns if
 downloads dependencies,
 and prints what to do next. Progress is animated on a terminal; use
 `--plain` for line-by-line output, and `--skip-deps` to skip
-`gleam deps download`. Howdy, Howdy UI and Howdy Dev use Git dependencies
-from `https://github.com/mikeyjones/howdy.git`; Git must be installed to
-download them. No local Howdy checkout is needed.
+`gleam deps download`. No local Howdy checkout is needed.
 
-Projects depend on a Howdy release tag, never a branch, so every Howdy
-package in a project comes from the same release. By default that is the
-release this CLI's templates were written and tested against,
-`scaffold.Release` in `internal/scaffold/scaffold.go`. Pass `--howdy 1.0.0`
-to use another; a release the templates predate may need changes to the
-generated code. When a Howdy release changes what a project needs, update
-the templates and `scaffold.Release` together.
+Every Howdy package in a project comes from the same Howdy release. By
+default that is the release this CLI's templates were written and tested
+against, `scaffold.Release` in `internal/scaffold/scaffold.go`. Pass
+`--howdy 1.0.0` to use another; a release the templates predate may need
+changes to the generated code. When a Howdy release changes what a project
+needs, update the templates and `scaffold.Release` together.
 
-`--source hex` takes the packages from Hex instead: each one is written as
-a version range, from its version in the release up to its next major
+The packages come from Hex: each one is written as a version range, from
+its version in the release up to its next major
 (`howdy_ui = ">= 1.0.0 and < 2.0.0"`). Howdy packages are versioned
 separately, so the CLI keeps a copy of the Howdy repository's
 `releases/releases.json` in `internal/scaffold/releases.json`; copy it over
 with each release. For a release newer than that copy it reads
 `releases/releases.json` at the release's tag on GitHub instead, so an
-older CLI can still make a project on a newer release. `--source git` is
-the default until the packages are on Hex; `scaffold.DefaultSource` in
-`internal/scaffold/dependency.go` switches it.
+older CLI can still make a project on a newer release.
+
+`--source git` takes them from `https://github.com/mikeyjones/howdy.git`
+at the release tag instead, never a branch, which needs Git installed; the
+Dockerfile then installs Git too. Use it for a release that is not on Hex,
+or with `repository` in the config file for a fork or private mirror.
+`scaffold.DefaultSource` in `internal/scaffold/dependency.go` sets the
+default.
 `howdy add` follows the project: it reads whether `howdy` comes from Git or
 Hex in `gleam.toml` and adds its package the same way.
 
@@ -173,7 +175,7 @@ commented out at howdy's own default, and `howdy config` (or `howdy config
 
 ```toml
 [new]
-source = "hex"                # git or hex, as --source
+source = "git"                # hex or git, as --source
 howdy = "1.0.0"               # the Howdy release every package comes from, as --howdy
 repository = "https://git.example.com/me/howdy.git"  # a fork or private mirror, for source = "git"
 database = "sqlite"           # postgres, sqlite or none

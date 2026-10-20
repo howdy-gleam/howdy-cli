@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"howdy/internal/scaffold"
@@ -33,11 +34,19 @@ func NewDocker(p *Project, gleam, erlang string) *Docker {
 
 func (d *Docker) scaffold() *scaffold.Project {
 	p := d.Project
+	// The image needs Git only for dependencies that come from Git.
+	source := scaffold.Hex
+	if toml, err := os.ReadFile(filepath.Join(p.Dir, "gleam.toml")); err != nil || gitDependency.Match(toml) {
+		source = scaffold.Git
+	}
 	return &scaffold.Project{
 		Name: p.Name, Dir: p.Dir, Database: scaffold.Database(p.Database), API: p.API,
-		Gleam: d.Gleam, Erlang: d.Erlang,
+		Source: source, Gleam: d.Gleam, Erlang: d.Erlang,
 	}
 }
+
+// gitDependency matches a gleam.toml dependency downloaded with Git.
+var gitDependency = regexp.MustCompile(`(?m)^[a-z_0-9]+\s*=\s*\{[^}]*\bgit\s*=`)
 
 // Write writes the files the project does not have yet, and returns the
 // paths written and those it already had, which are left alone.

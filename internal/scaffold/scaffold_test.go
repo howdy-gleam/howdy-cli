@@ -48,7 +48,7 @@ func TestWriteRendersProject(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	p.Database = NoDatabase
+	p.Database, p.Source = NoDatabase, Git
 
 	var seen []string
 	n, err := p.Write(func(path string) { seen = append(seen, path) })
@@ -273,7 +273,7 @@ func TestProjectsDependOnOneRelease(t *testing.T) {
 			t.Fatal(err)
 		}
 		p.Database = db
-		p.Release = "2.3.1"
+		p.Release, p.Source = "2.3.1", Git
 		files, err := p.Files()
 		if err != nil {
 			t.Fatal(err)
@@ -304,7 +304,7 @@ func TestRepositoryReplacesTheHowdyRepository(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	p.Repository = "https://git.example.com/me/howdy.git"
+	p.Source, p.Repository = Git, "https://git.example.com/me/howdy.git"
 	files, err := p.Files()
 	if err != nil {
 		t.Fatal(err)
@@ -371,7 +371,7 @@ func TestFullProject(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		p.Database = db
+		p.Database, p.Source = db, Git
 		files, err := p.Files()
 		if err != nil {
 			t.Fatal(err)
@@ -546,7 +546,7 @@ func TestAgentGuide(t *testing.T) {
 					t.Errorf("CLAUDE.md (%s) should import AGENTS.md: %q", label, byPath["CLAUDE.md"])
 				}
 				guide := byPath["AGENTS.md"]
-				for _, want := range []string{"howdy check", "howdy routes", "--dry-run", "src/demo_site.gleam", "v" + Release} {
+				for _, want := range []string{"howdy check", "howdy routes", "--dry-run", "src/demo_site.gleam", "release " + Release} {
 					if !strings.Contains(guide, want) {
 						t.Errorf("AGENTS.md (%s) should mention %q", label, want)
 					}

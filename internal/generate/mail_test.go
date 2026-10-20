@@ -16,6 +16,8 @@ func scaffolded(t *testing.T, database scaffold.Database, minimal bool) *Project
 		t.Fatal(err)
 	}
 	s.Database, s.Minimal = database, minimal
+	// These tests check the Git dependency lines; see TestAddToHexProject.
+	s.Source = scaffold.Git
 	if _, err := s.Write(nil); err != nil {
 		t.Fatal(err)
 	}

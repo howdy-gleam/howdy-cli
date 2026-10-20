@@ -48,9 +48,8 @@ const (
 )
 
 // DefaultSource is where new projects get their Howdy packages unless
-// --source says otherwise. Switch it to Hex once the packages of Release
-// are published there.
-const DefaultSource = Git
+// --source says otherwise.
+const DefaultSource = Hex
 
 // ParseSource reads the value of the --source flag.
 func ParseSource(s string) (SourceKind, error) {

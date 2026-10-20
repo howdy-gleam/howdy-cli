@@ -83,12 +83,9 @@ func (p *Project) Files() ([]File, error) {
 // DockerFiles renders only the files for containers, sorted by path, for
 // 'howdy add docker'.
 func (p *Project) DockerFiles() ([]File, error) {
-	funcs, err := p.funcs()
-	if err != nil {
-		return nil, err
-	}
+	// The container files name no Howdy package, so they need no source.
 	byPath := map[string]File{}
-	if err := render("templates/docker", p.data(), funcs, byPath); err != nil {
+	if err := render("templates/docker", p.data(), nil, byPath); err != nil {
 		return nil, err
 	}
 	files := make([]File, 0, len(byPath))

@@ -18,6 +18,8 @@ func project(t *testing.T, database scaffold.Database) *Project {
 		t.Fatal(err)
 	}
 	s.Database = database
+	// These tests check the Git dependency lines; see TestAddToHexProject.
+	s.Source = scaffold.Git
 	if _, err := s.Write(nil); err != nil {
 		t.Fatal(err)
 	}

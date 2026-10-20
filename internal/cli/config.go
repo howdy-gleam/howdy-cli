@@ -106,7 +106,7 @@ Its [new] table holds the defaults for 'howdy new'. A flag given on the
 command line always wins, and 'howdy new --no-config' ignores the file:
 
   [new]
-  source = "hex"                # git or hex, as --source
+  source = "git"                # hex or git, as --source
   howdy = "` + scaffold.Release + `"              # the Howdy release, as --howdy
   repository = "https://..."    # the Git repository the packages come from
   database = "sqlite"           # postgres, sqlite or none

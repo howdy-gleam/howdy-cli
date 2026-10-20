@@ -80,3 +80,46 @@ func TestAddDockerToANewProjectNeedsNothing(t *testing.T) {
 		t.Errorf("a project 'howdy new' made needs no hand: %q", notes)
 	}
 }
+
+func TestDockerfileInstallsGitOnlyForGitDependencies(t *testing.T) {
+	for _, source := range []scaffold.SourceKind{scaffold.Hex, scaffold.Git} {
+		for _, db := range []scaffold.Database{scaffold.NoDatabase, scaffold.Postgres} {
+			s, err := scaffold.New(filepath.Join(t.TempDir(), "demo_site"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			s.Database, s.Source = db, source
+			files, err := s.Files()
+			if err != nil {
+				t.Fatal(err)
+			}
+			var made string
+			for _, f := range files {
+				if f.Path == "Dockerfile" {
+					made = string(f.Content)
+				}
+			}
+			s.NoDocker = true
+			if _, err := s.Write(nil); err != nil {
+				t.Fatal(err)
+			}
+			p, err := Open(s.Dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, _, err := NewDocker(p, "", "").Write(); err != nil {
+				t.Fatal(err)
+			}
+			added := read(t, p, "Dockerfile")
+			for how, dockerfile := range map[string]string{"howdy new": made, "howdy add docker": added} {
+				label := string(source) + ", " + db.Label() + ", " + how
+				if strings.Contains(dockerfile, "apk add --no-cache git") != (source == scaffold.Git) {
+					t.Errorf("%s: the image should install Git only for Git dependencies:\n%s", label, dockerfile)
+				}
+				if strings.Contains(dockerfile, "build-base") != (db != scaffold.NoDatabase) {
+					t.Errorf("%s: the image should install a C toolchain only with a database:\n%s", label, dockerfile)
+				}
+			}
+		}
+	}
+}
