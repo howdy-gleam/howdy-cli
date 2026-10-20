@@ -288,7 +288,10 @@ PostgreSQL, to try it before deploying.
 
 The image compiles the app with `gleam export erlang-shipment`, which
 leaves out `dev/` and the dev dependencies, and runs it as an unprivileged
-user on `0.0.0.0:8787`.
+user on `0.0.0.0:8787`. Once the app has
+[islands](https://tryhowdy.dev/docs/ui/islands), it runs
+`gleam run -m howdy/ui export` instead, which bundles them for the browser
+first.
 {{- if eq .Database "sqlite"}} The SQLite database is kept in the `/data`
 volume, so it outlives the container. Only one container at a time can use
 it, so run a single replica.

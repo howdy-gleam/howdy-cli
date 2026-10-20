@@ -691,6 +691,27 @@ func TestProjectsAreReadyToDeploy(t *testing.T) {
 	}
 }
 
+// An API project has no Howdy UI, so no islands to bundle: it exports the
+// shipment with Gleam alone.
+func TestDockerfileForAPI(t *testing.T) {
+	p, err := New(filepath.Join(t.TempDir(), "demo_api"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.Database, p.API = Postgres, true
+	if _, err := p.Write(nil); err != nil {
+		t.Fatal(err)
+	}
+	src, err := os.ReadFile(filepath.Join(p.Dir, "Dockerfile"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dockerfile := string(src)
+	if !strings.Contains(dockerfile, "RUN gleam export erlang-shipment") || strings.Contains(dockerfile, "howdy/ui") {
+		t.Errorf("an API project's Dockerfile should export the shipment with Gleam alone:\n%s", dockerfile)
+	}
+}
+
 func TestDockerFiles(t *testing.T) {
 	for _, db := range []Database{NoDatabase, SQLite, Postgres} {
 		p, err := New(filepath.Join(t.TempDir(), "demo_site"))
@@ -711,7 +732,8 @@ func TestDockerFiles(t *testing.T) {
 		dockerfile := read("Dockerfile")
 		for _, want := range []string{
 			"ARG GLEAM_VERSION=v1.18.1", "ARG ERLANG_VERSION=28",
-			"RUN gleam export erlang-shipment", "COPY --chown=app bin/start /app/bin/start",
+			"gleam run -m howdy/ui export;", "gleam export erlang-shipment;",
+			"COPY --chown=app bin/start /app/bin/start",
 			"wget -qO /dev/null http://127.0.0.1:8787/up", `ENTRYPOINT ["/app/bin/start"]`,
 		} {
 			if !strings.Contains(dockerfile, want) {
