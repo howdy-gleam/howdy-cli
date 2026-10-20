@@ -4,8 +4,12 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 )
 
 // Repository is the Git repository the Howdy packages are released from.
@@ -59,28 +63,101 @@ func ParseSource(s string) (SourceKind, error) {
 
 // releasesJSON is a copy of releases/releases.json in the Howdy repository:
 // the version of every package in each Howdy release, which a project
-// taking its packages from Hex needs. Update it with Release.
+// taking its packages from Hex needs. Update it with Release; a release
+// newer than this copy is read from its tag instead (see releasePackages).
 //
 //go:embed releases.json
 var releasesJSON []byte
 
-// releases maps each Howdy release to the versions of its packages.
+// releases maps each Howdy release in releasesJSON to the versions of its
+// packages.
 var releases = func() map[string]map[string]string {
+	byVersion, err := parseReleases(releasesJSON)
+	if err != nil {
+		panic("releases.json: " + err.Error())
+	}
+	return byVersion
+}()
+
+// parseReleases reads a releases.json, mapping each release to the versions
+// of its packages.
+func parseReleases(data []byte) (map[string]map[string]string, error) {
 	var file struct {
 		Releases []struct {
 			Version  string            `json:"version"`
 			Packages map[string]string `json:"packages"`
 		} `json:"releases"`
 	}
-	if err := json.Unmarshal(releasesJSON, &file); err != nil {
-		panic("releases.json: " + err.Error())
+	if err := json.Unmarshal(data, &file); err != nil {
+		return nil, err
 	}
 	byVersion := map[string]map[string]string{}
 	for _, r := range file.Releases {
 		byVersion[r.Version] = r.Packages
 	}
-	return byVersion
-}()
+	return byVersion, nil
+}
+
+// ReleasesURL is where releases.json is read from for a release newer than
+// the copy built into howdy: the file at the release's tag, %s, which
+// scripts/release.sh commits before tagging. Tests point it at a local
+// server.
+var ReleasesURL = "https://raw.githubusercontent.com/mikeyjones/howdy/%s/releases/releases.json"
+
+var (
+	fetchedMu sync.Mutex
+	// fetched holds the releases read from GitHub, so each is read once.
+	fetched = map[string]map[string]string{}
+)
+
+// releasePackages is the version of every package in a Howdy release, such
+// as "1.0.0": from the copy of releases.json built into howdy, or for a
+// newer release, from releases.json at its tag on GitHub.
+func releasePackages(release string) (map[string]string, error) {
+	if packages, ok := releases[release]; ok {
+		return packages, nil
+	}
+	fetchedMu.Lock()
+	defer fetchedMu.Unlock()
+	if packages, ok := fetched[release]; ok {
+		return packages, nil
+	}
+	packages, err := fetchRelease(release)
+	if err != nil {
+		return nil, fmt.Errorf("this howdy does not know the package versions of Howdy %s on Hex, and %w; 'howdy upgrade' gets a newer howdy", release, err)
+	}
+	fetched[release] = packages
+	return packages, nil
+}
+
+func fetchRelease(release string) (map[string]string, error) {
+	url := fmt.Sprintf(ReleasesURL, "v"+release)
+	client := http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		return nil, fmt.Errorf("could not read them from GitHub: %w", err)
+	}
+	defer resp.Body.Close()
+	switch {
+	case resp.StatusCode == http.StatusNotFound:
+		return nil, fmt.Errorf("github.com/mikeyjones/howdy has no release tag v%s to read them from", release)
+	case resp.StatusCode != http.StatusOK:
+		return nil, fmt.Errorf("could not read them from GitHub: GET %s: %s", url, resp.Status)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("could not read them from GitHub: %w", err)
+	}
+	byVersion, err := parseReleases(body)
+	if err != nil {
+		return nil, fmt.Errorf("could not read releases.json at tag v%s: %w", release, err)
+	}
+	packages, ok := byVersion[release]
+	if !ok {
+		return nil, fmt.Errorf("releases.json at tag v%s does not list it", release)
+	}
+	return packages, nil
+}
 
 // Source is where a project takes its Howdy packages from. Every Howdy
 // package in a project comes from the same source and release, so they
@@ -93,24 +170,28 @@ type Source struct {
 	// Release is the Howdy release, such as "1.0.0", whose package versions
 	// a Hex source uses.
 	Release string
+	// packages is the version of each package in Release, for Hex.
+	packages map[string]string
 }
 
 // ReleaseSource is the source of the packages of a Howdy release, such as
-// "1.0.0", from kind. Hex knows only the releases in releases.json.
+// "1.0.0", from kind. For Hex it reads the release's package versions from
+// GitHub when it is newer than the copy of releases.json built into howdy.
 func ReleaseSource(kind SourceKind, release string) (Source, error) {
 	if kind != Hex {
 		return Source{Kind: Git, Git: Repository, Ref: "v" + release}, nil
 	}
-	if _, ok := releases[release]; !ok {
-		return Source{}, fmt.Errorf("this howdy does not know the package versions of Howdy %s on Hex; 'howdy upgrade' gets a newer howdy", release)
+	packages, err := releasePackages(release)
+	if err != nil {
+		return Source{}, err
 	}
-	return Source{Kind: Hex, Release: release}, nil
+	return Source{Kind: Hex, Release: release, packages: packages}, nil
 }
 
 // Check fails for a package the source does not have: a Hex source has
 // only the packages of its release.
 func (s Source) Check(pkg string) error {
-	if _, ok := releases[s.Release][pkg]; s.Kind == Hex && !ok {
+	if _, ok := s.packages[pkg]; s.Kind == Hex && !ok {
 		return fmt.Errorf("Howdy %s has no %s", s.Release, pkg)
 	}
 	return nil
@@ -120,7 +201,7 @@ func (s Source) Check(pkg string) error {
 // ref for Git, or its version in the release for Hex.
 func (s Source) Version(pkg string) string {
 	if s.Kind == Hex {
-		return releases[s.Release][pkg]
+		return s.packages[pkg]
 	}
 	return s.Ref
 }

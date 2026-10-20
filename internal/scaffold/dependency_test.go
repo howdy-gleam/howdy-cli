@@ -1,6 +1,8 @@
 package scaffold
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -50,11 +52,58 @@ func TestReleases(t *testing.T) {
 			t.Errorf("releases.json has no %s in Howdy %s", pkg, Release)
 		}
 	}
-	if _, err := ReleaseSource(Hex, "0.0.1"); err == nil {
-		t.Error("Hex should refuse a release releases.json does not list")
-	}
 	if _, err := ReleaseSource(Git, "0.0.1"); err != nil {
 		t.Errorf("Git should take any release tag: %v", err)
+	}
+}
+
+func TestNewerRelease(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		switch r.URL.Path {
+		case "/v1.1.0/releases.json":
+			w.Write([]byte(`{"releases": [
+				{"version": "1.0.0", "packages": {"howdy": "1.0.0", "howdy_auth": "1.0.0"}},
+				{"version": "1.1.0", "packages": {"howdy": "1.1.0", "howdy_auth": "1.0.0"}}
+			]}`))
+		case "/v1.2.0/releases.json":
+			// A tag made before release.sh recorded the release.
+			w.Write([]byte(`{"releases": [{"version": "1.0.0", "packages": {"howdy": "1.0.0"}}]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	defer func(url string) { ReleasesURL = url }(ReleasesURL)
+	ReleasesURL = server.URL + "/%s/releases.json"
+
+	source, err := ReleaseSource(Hex, "1.1.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := source.Dependency("howdy_auth"); got != `howdy_auth = ">= 1.0.0 and < 2.0.0"` {
+		t.Errorf("howdy_auth in Howdy 1.1.0 = %s", got)
+	}
+	if got := source.Dependency("howdy"); got != `howdy = ">= 1.1.0 and < 2.0.0"` {
+		t.Errorf("howdy in Howdy 1.1.0 = %s", got)
+	}
+	if err := source.Check("howdy_ui"); err == nil {
+		t.Error("Check should refuse a package the fetched release does not list")
+	}
+	if _, err := ReleaseSource(Hex, "1.1.0"); err != nil || requests != 1 {
+		t.Errorf("a fetched release should be kept: %v, %d requests", err, requests)
+	}
+	if _, err := ReleaseSource(Hex, Release); err != nil || requests != 1 {
+		t.Errorf("a release built into howdy should not be fetched: %v, %d requests", err, requests)
+	}
+	for release, want := range map[string]string{
+		"0.0.1": "no release tag v0.0.1",
+		"1.2.0": "does not list it",
+	} {
+		if _, err := ReleaseSource(Hex, release); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("ReleaseSource(Hex, %q) = %v, want an error saying %q", release, err, want)
+		}
 	}
 }
 

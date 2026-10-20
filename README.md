@@ -141,10 +141,12 @@ the templates and `scaffold.Release` together.
 a version range, from its version in the release up to its next major
 (`howdy_ui = ">= 1.0.0 and < 2.0.0"`). Howdy packages are versioned
 separately, so the CLI keeps a copy of the Howdy repository's
-`releases/releases.json` in `internal/scaffold/releases.json` and only knows
-the Hex versions of the releases listed there; copy it over with each
-release. `--source git` is the default until the packages are on Hex;
-`scaffold.DefaultSource` in `internal/scaffold/dependency.go` switches it.
+`releases/releases.json` in `internal/scaffold/releases.json`; copy it over
+with each release. For a release newer than that copy it reads
+`releases/releases.json` at the release's tag on GitHub instead, so an
+older CLI can still make a project on a newer release. `--source git` is
+the default until the packages are on Hex; `scaffold.DefaultSource` in
+`internal/scaffold/dependency.go` switches it.
 `howdy add` follows the project: it reads whether `howdy` comes from Git or
 Hex in `gleam.toml` and adds its package the same way.
 
