@@ -301,7 +301,21 @@ with; change them at the top of the `Dockerfile` when you upgrade.
 
 Set `HOWDY_NODE_NAME` and `HOWDY_COOKIE` to start the app as a named
 Erlang node, for `bin/start remote` or to join other nodes in a cluster.
-`bin/start` explains them.
+`bin/start` explains them. Distribution is off without them, and nothing
+can attach to the app.
+
+Turning it on opens a door into the app: anyone who can reach the node
+and knows the cookie can run any code in it, using its database and
+reading its secrets with no sign-in. So:
+
+- Make the cookie long and random, such as `openssl rand -hex 32`, and
+  keep it in the platform's secrets, never in the repository or the image.
+- Never publish the distribution ports. Erlang's port mapper listens on
+  4369 and the node on `HOWDY_DIST_PORT`, or on any port without it; keep
+  both on a private network that only the app's own nodes can reach, and
+  never `-p` them from Docker or open them in a firewall.
+- Distribution traffic is not encrypted, so only run it across a network
+  you trust.
 {{- end}}
 
 Whatever runs the app, it is ready for production:
