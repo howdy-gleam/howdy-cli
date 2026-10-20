@@ -3,6 +3,7 @@ package generate
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -105,7 +106,7 @@ func TestAddJobs(t *testing.T) {
 			"gleam.toml": {`howdy_jobs = { git = "https://github.com/mikeyjones/howdy.git", ref = "v` + scaffold.Release + `", path = "jobs" }`},
 			"src/demo_site.gleam": {
 				"pub fn jobs_runner(services: Services) -> jobs.Runner {\n  background_jobs.runner(services.db)\n}",
-				"let assert Ok(_) = jobs.start(jobs_runner(services))\n  let assert Ok(_) = configured(services) |> howdy.start",
+				"|> supervisor.add(jobs.supervised(jobs_runner(services)))\n    |> supervisor.add(howdy.supervised(configured(services)))",
 				"import howdy/jobs\n",
 				"import demo_site/background_jobs\n",
 			},
@@ -186,7 +187,7 @@ func TestAddNotificationsToJobsAndAuth(t *testing.T) {
 		"src/demo_site/platform/notifier.gleam": {"auth.required(identity)(ctx)"},
 	})
 	root := read(t, p, "src/demo_site.gleam")
-	if strings.Count(root, "jobs.start(") != 1 || strings.Count(root, "pub fn jobs_runner(") != 1 {
+	if strings.Count(root, "jobs.supervised(") != 1 || strings.Count(root, "pub fn jobs_runner(") != 1 {
 		t.Errorf("the jobs should start once:\n%s", root)
 	}
 }
@@ -260,5 +261,42 @@ func TestAddToHexProject(t *testing.T) {
 	}
 	if _, err := NewStorage(p); err == nil || !strings.Contains(err.Error(), "howdy 9.0.0 from Hex") {
 		t.Errorf("storage on an unknown Hex release: %v", err)
+	}
+}
+
+// A project made before 'howdy new' put the server in a supervision tree
+// starts it with howdy.start, and gets the processes the packages add
+// started beside it in the same way.
+func TestAddToUnsupervisedMain(t *testing.T) {
+	p := scaffolded(t, scaffold.SQLite, false)
+	root := filepath.Join(p.Dir, "src", "demo_site.gleam")
+	text := read(t, p, "src/demo_site.gleam")
+	tree := regexp.MustCompile(`(?s)  // The server runs in a supervision tree.*?howdy\.start_application\([^)]*\)\n`)
+	if !tree.MatchString(text) {
+		t.Fatalf("main has no supervision tree:\n%s", text)
+	}
+	text = tree.ReplaceAllString(text, "  let assert Ok(_) = configured(services) |> howdy.start\n")
+	os.WriteFile(root, []byte(text), 0o644)
+	toml := filepath.Join(p.Dir, "gleam.toml")
+	before, _ := os.ReadFile(toml)
+	os.WriteFile(toml, regexp.MustCompile(`(?m)^gleam_otp = .*\n`).ReplaceAll(before, nil), 0o644)
+
+	addJobs(t, p)
+	addFlags(t, p)
+	addRemote(t, p)
+	containsAll(t, "howdy.start", p, map[string][]string{
+		"gleam.toml": {`gleam_otp = ">= 1.2.0 and < 2.0.0"`},
+		"src/demo_site.gleam": {
+			"let assert Ok(_) = jobs.start(jobs_runner(services))\n  let assert Ok(_) = configured(services) |> howdy.start",
+			"let features = feature_flags.start(db)\n",
+			"rpc.start()\n  let rpc_token = rpc.token()\n",
+		},
+	})
+	text = read(t, p, "src/demo_site.gleam")
+	if strings.Contains(text, "supervisor.") || strings.Contains(text, ".supervised(") {
+		t.Errorf("main without a supervision tree should not get children for one:\n%s", text)
+	}
+	if got := read(t, p, "gleam.toml"); strings.Count(got, "gleam_otp") != 1 {
+		t.Errorf("gleam_otp should be added once:\n%s", got)
 	}
 }

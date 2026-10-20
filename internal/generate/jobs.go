@@ -96,10 +96,34 @@ func (j *Jobs) Write() ([]string, error) {
 }
 
 var (
-	appMain     = regexp.MustCompile(`(?m)^pub fn main\(\) -> Nil \{\n`)
-	appStart    = regexp.MustCompile(`(?m)^([ \t]*)let assert Ok\(_\) = configured\(services\) \|> howdy\.start\n`)
+	appMain = regexp.MustCompile(`(?m)^pub fn main\(\) -> Nil \{\n`)
+	// appStart is how main started the server before 'howdy new' put it in
+	// a supervision tree.
+	appStart = regexp.MustCompile(`(?m)^([ \t]*)let assert Ok\(_\) = configured\(services\) \|> howdy\.start\n`)
+	// serverChild is the server in the supervision tree main starts.
+	serverChild = regexp.MustCompile(`(?m)^([ \t]*)\|> supervisor\.add\(howdy\.supervised\(configured\(services\)\)\)\n`)
 	adminRecord = "|> admin.telemetry(recorder)"
 )
+
+// supervised reports whether main starts the server in a supervision tree,
+// as 'howdy new' writes it, rather than with howdy.start.
+func supervised(text string) bool {
+	return serverChild.MatchString(text)
+}
+
+// addChild adds a child to the supervision tree main starts, before the
+// server so that it starts first and stops last, after the comment given.
+func addChild(text, comment, child string) (string, error) {
+	loc := serverChild.FindStringSubmatchIndex(text)
+	if loc == nil {
+		return "", errors.New("no supervision tree starting the configured app")
+	}
+	indent := text[loc[2]:loc[3]]
+	return text[:loc[0]] +
+		indent + "// " + comment + "\n" +
+		indent + "|> supervisor.add(" + child + ")\n" +
+		text[loc[0]:], nil
+}
 
 // jobsRunner is the function 'howdy add jobs' puts in src/<project>.gleam,
 // building the runner from the app's services so packages that queue jobs,
@@ -124,20 +148,26 @@ func (j *Jobs) Register() (notes []string) {
 	root := filepath.Join("src", p.Name+".gleam")
 	err := editFile(filepath.Join(p.Dir, root), func(text string) (string, error) {
 		main := appMain.FindStringIndex(text)
-		start := appStart.FindStringSubmatchIndex(text)
-		if main == nil || start == nil {
+		if main == nil {
 			return "", errors.New("no main starting the configured app")
 		}
-		indent := text[start[2]:start[3]]
-		text = text[:start[0]] +
-			indent + "// Background jobs run beside the server: see background_jobs.gleam.\n" +
-			indent + "let assert Ok(_) = jobs.start(jobs_runner(services))\n" +
-			text[start[0]:]
+		const comment = "Background jobs run beside the server: see background_jobs.gleam."
+		if supervised(text) {
+			text, _ = addChild(text, comment, "jobs.supervised(jobs_runner(services))")
+		} else if start := appStart.FindStringSubmatchIndex(text); start != nil {
+			indent := text[start[2]:start[3]]
+			text = text[:start[0]] +
+				indent + "// " + comment + "\n" +
+				indent + "let assert Ok(_) = jobs.start(jobs_runner(services))\n" +
+				text[start[0]:]
+		} else {
+			return "", errors.New("no main starting the configured app")
+		}
 		text = text[:main[0]] + jobsRunner + text[main[0]:]
 		return addImports(text, "import howdy/jobs", module), nil
 	})
 	if err != nil {
-		notes = append(notes, fmt.Sprintf("Start the jobs in %s: add pub fn jobs_runner(services: Services) -> jobs.Runner { background_jobs.runner(services.db) }, and in main, before the server starts, let assert Ok(_) = jobs.start(jobs_runner(services)) (import howdy/jobs and %s/background_jobs).", root, p.Name))
+		notes = append(notes, fmt.Sprintf("Start the jobs in %s: add pub fn jobs_runner(services: Services) -> jobs.Runner { background_jobs.runner(services.db) }, and in main add jobs.supervised(jobs_runner(services)) to the supervision tree before the server, or call let assert Ok(_) = jobs.start(jobs_runner(services)) before the server starts (import howdy/jobs and %s/background_jobs).", root, p.Name))
 	}
 
 	database := filepath.Join("src", p.Name, "platform", "database.gleam")
@@ -205,6 +235,17 @@ func renderAll(data any, targets []struct{ template, path string }) ([]File, err
 // installFiles adds a package's lines to gleam.toml's [dependencies] and
 // writes its files, none of which may exist yet. It returns the paths
 // written or changed.
+// otpDependency is the gleam.toml line for gleam_otp, which a module
+// offering a child for a supervisor imports, or "" when the project in dir
+// depends on it already.
+func otpDependency(dir string) string {
+	toml, _ := os.ReadFile(filepath.Join(dir, "gleam.toml"))
+	if dependency("gleam_otp").Match(toml) {
+		return ""
+	}
+	return "gleam_otp = \">= 1.2.0 and < 2.0.0\"\n"
+}
+
 func installFiles(p *Project, dependencies string, files []File) ([]string, error) {
 	for _, f := range files {
 		if _, err := os.Stat(filepath.Join(p.Dir, f.Path)); err == nil {

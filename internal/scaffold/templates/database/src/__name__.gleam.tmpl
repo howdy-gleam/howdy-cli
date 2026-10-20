@@ -10,6 +10,7 @@ import dot_env/env
 import gleam/erlang/application
 {{- end}}
 import gleam/erlang/process
+import gleam/otp/static_supervisor as supervisor
 import gloo/adapter/sqlite
 import gloo/repo.{type Repo}
 import howdy
@@ -156,6 +157,13 @@ pub fn main() -> Nil {
 {{- if .Full}}
   expose(services)
 {{- end}}
-  let assert Ok(_) = configured(services) |> howdy.start
+  // The server runs in a supervision tree owned by an OTP application, so
+  // stopping the node, as SIGTERM from `docker stop` does, stops it in
+  // order: it stops listening and lets requests in flight finish. Add
+  // anything else the app keeps running to the tree.
+  let assert Ok(_) =
+    supervisor.new(supervisor.OneForOne)
+    |> supervisor.add(howdy.supervised(configured(services)))
+    |> howdy.start_application(name: "{{.Name}}_server")
   process.sleep_forever()
 }

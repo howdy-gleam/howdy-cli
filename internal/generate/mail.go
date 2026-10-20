@@ -315,7 +315,8 @@ func addServicesField(text, field string) (string, error) {
 }
 
 // addToServices adds a field to the line `let services = Services(...)`,
-// binding it on the lines before, after any extra lines given.
+// binding it to value on the lines before, after any extra lines given. An
+// empty value leaves the binding to those lines.
 func addToServices(text, field, value string, before ...string) (string, error) {
 	loc := servicesMade.FindStringSubmatchIndex(text)
 	if loc == nil {
@@ -333,7 +334,10 @@ func addToServices(text, field, value string, before ...string) (string, error) 
 			lines.WriteString(indent + line + "\n")
 		}
 	}
-	fmt.Fprintf(&lines, "%slet %s = %s\n%slet services = %s(%s)\n", indent, field, value, indent, constructor, args)
+	if value != "" {
+		fmt.Fprintf(&lines, "%slet %s = %s\n", indent, field, value)
+	}
+	fmt.Fprintf(&lines, "%slet services = %s(%s)\n", indent, constructor, args)
 	return text[:loc[0]] + lines.String() + text[loc[1]:], nil
 }
 

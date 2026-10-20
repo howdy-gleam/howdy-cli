@@ -24,6 +24,16 @@ for a 404 when the request's `Accept` header prefers HTML, as a browser's
 does; API clients, `fetch` and curl get Howdy's JSON error, and a 404 page a
 controller rendered itself is kept.
 
+`main` starts the server in a supervision tree owned by an OTP application,
+`<project>_server`, as the
+[supervision guide](https://github.com/mikeyjones/howdy/blob/v1.0.0/docs/guides/supervision.djot)
+describes: a crashed server is restarted, and stopping the node, as
+`SIGTERM` does, lets requests in flight finish. `howdy add` puts the
+processes its packages keep running in the same tree, ahead of the server:
+the feature flag keeper, the jobs runner and the remote procedure server.
+In a project whose `main` still calls `howdy.start` they are started beside
+it instead.
+
 Every project is also set up for development with the rest of Howdy:
 
 - **Howdy Admin** (`howdy_admin`, a dev dependency) is mounted at `/_howdy`

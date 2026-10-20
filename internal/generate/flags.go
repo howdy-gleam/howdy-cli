@@ -95,7 +95,7 @@ func (f *Flags) Write() ([]string, error) {
 			return nil, fmt.Errorf("%s already exists; nothing was written", file.Path)
 		}
 	}
-	line := f.Dependency("howdy_flags") + "\n"
+	line := f.Dependency("howdy_flags") + "\n" + otpDependency(p.Dir)
 	if err := insertDependencies(filepath.Join(p.Dir, "gleam.toml"), line); err != nil {
 		return nil, err
 	}
@@ -121,13 +121,23 @@ func (f *Flags) Register() (notes []string) {
 		if err != nil {
 			return "", err
 		}
-		if text, err = start(text); err != nil {
+		if !supervised(text) {
+			if text, err = start(text); err != nil {
+				return "", err
+			}
+			return addImports(text, "import howdy/flags", module), nil
+		}
+		keeper := "let #(features, flag_keeper) = feature_flags.supervised(db)"
+		if text, err = addToServices(text, "features", "", keeper); err != nil {
+			return "", err
+		}
+		if text, err = addChild(text, "Keeps the feature flags current: see feature_flags.gleam.", "flag_keeper"); err != nil {
 			return "", err
 		}
 		return addImports(text, "import howdy/flags", module), nil
 	})
 	if err != nil {
-		notes = append(notes, fmt.Sprintf("Add the flags to the app in %s: features: flags.Flags in Services, built in main with feature_flags.start(db) after migrating (import howdy/flags and %s/feature_flags).", root, p.Name))
+		notes = append(notes, fmt.Sprintf("Add the flags to the app in %s: features: flags.Flags in Services, and in main after migrating, let #(features, flag_keeper) = feature_flags.supervised(db), pass features to Services and add flag_keeper to the supervision tree before the server (import howdy/flags and %s/feature_flags).", root, p.Name))
 	}
 
 	database := filepath.Join("src", p.Name, "platform", "database.gleam")

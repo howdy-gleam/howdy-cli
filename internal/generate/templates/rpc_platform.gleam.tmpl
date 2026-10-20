@@ -1,8 +1,8 @@
 //// Remote procedure calls with howdy_remote. The procedures in
 //// {{.Name}}/procedures.gleam are served two ways:
 ////
-//// - to the other nodes of an Erlang cluster, started in `main` and the dev
-////   server. Nodes need a name and a shared cookie:
+//// - to the other nodes of an Erlang cluster, started in `main`'s
+////   supervision tree and in the dev server. Nodes need a name and a shared cookie:
 ////   `ERL_FLAGS="-sname web -setcookie $COOKIE" gleam run`. Connect only
 ////   your own nodes on a private network: connected nodes trust each
 ////   other completely.
@@ -23,6 +23,7 @@
 //// over HTTP.
 
 import dot_env/env
+import gleam/otp/supervision
 import howdy/controller.{type Controller}
 import howdy/remote
 import {{.Name}}/procedures
@@ -41,6 +42,12 @@ pub fn server() -> remote.Server {
 pub fn start() -> Nil {
   let assert Ok(_) = remote.start(server())
   Nil
+}
+
+/// `start` as a child of a supervisor, which restarts the procedure server
+/// if it exits.
+pub fn supervised() -> supervision.ChildSpecification(Nil) {
+  remote.supervised(server())
 }
 
 /// The token callers of /rpc must send, from `RPC_TOKEN`. Unset, it is
