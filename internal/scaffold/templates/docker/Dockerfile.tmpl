@@ -43,7 +43,20 @@ WORKDIR /build
 COPY gleam.toml manifest.toml ./
 RUN gleam deps download
 COPY . .
+{{- if .API}}
 RUN gleam export erlang-shipment
+{{- else}}
+# Islands are modules in a directory called islands, in the app or a
+# package. Howdy UI bundles them into priv/howdy_islands, with an esbuild it
+# downloads and checks, and then exports the Erlang shipment; a plain
+# `gleam export erlang-shipment` leaves them out. Without islands, there is
+# nothing to bundle.
+RUN if find src build/packages -path '*/islands/*' -name '*.gleam' | grep -q .; then \
+      gleam run -m howdy/ui export; \
+    else \
+      gleam export erlang-shipment; \
+    fi
+{{- end}}
 
 # The same Erlang image, so the compiled code and native drivers match it.
 FROM erlang:${ERLANG_VERSION}-alpine
