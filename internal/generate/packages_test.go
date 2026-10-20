@@ -69,7 +69,7 @@ func TestAddStorage(t *testing.T) {
 		s, err := NewStorage(p)
 		install(t, s, err)
 		containsAll(t, c.label, p, map[string][]string{
-			"gleam.toml": {`howdy_storage = { git = "https://github.com/mikeyjones/howdy.git", ref = "v` + scaffold.Release + `", path = "storage" }`},
+			"gleam.toml": {`howdy_storage = { git = "https://github.com/howdy-gleam/howdy.git", ref = "v` + scaffold.Release + `", path = "storage" }`},
 			"src/demo_site.gleam": {
 				"files: storage.Storage",
 				"let files = file_storage.from_env()\n",
@@ -103,7 +103,7 @@ func TestAddJobs(t *testing.T) {
 		addJobs(t, p)
 		label := c.db.Label()
 		containsAll(t, label, p, map[string][]string{
-			"gleam.toml": {`howdy_jobs = { git = "https://github.com/mikeyjones/howdy.git", ref = "v` + scaffold.Release + `", path = "jobs" }`},
+			"gleam.toml": {`howdy_jobs = { git = "https://github.com/howdy-gleam/howdy.git", ref = "v` + scaffold.Release + `", path = "jobs" }`},
 			"src/demo_site.gleam": {
 				"pub fn jobs_runner(services: Services) -> jobs.Runner {\n  background_jobs.runner(services.db)\n}",
 				"|> supervisor.add(jobs.supervised(jobs_runner(services)))\n    |> supervisor.add(howdy.supervised(configured(services)))",

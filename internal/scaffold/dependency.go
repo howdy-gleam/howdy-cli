@@ -13,7 +13,7 @@ import (
 )
 
 // Repository is the Git repository the Howdy packages are released from.
-const Repository = "https://github.com/mikeyjones/howdy.git"
+const Repository = "https://github.com/howdy-gleam/howdy.git"
 
 // packageDirs maps each Howdy package to its directory in Repository: ""
 // for the core package at the root.
@@ -101,7 +101,7 @@ func parseReleases(data []byte) (map[string]map[string]string, error) {
 // the copy built into howdy: the file at the release's tag, %s, which
 // scripts/release.sh commits before tagging. Tests point it at a local
 // server.
-var ReleasesURL = "https://raw.githubusercontent.com/mikeyjones/howdy/%s/releases/releases.json"
+var ReleasesURL = "https://raw.githubusercontent.com/howdy-gleam/howdy/%s/releases/releases.json"
 
 var (
 	fetchedMu sync.Mutex
@@ -139,7 +139,7 @@ func fetchRelease(release string) (map[string]string, error) {
 	defer resp.Body.Close()
 	switch {
 	case resp.StatusCode == http.StatusNotFound:
-		return nil, fmt.Errorf("github.com/mikeyjones/howdy has no release tag v%s to read them from", release)
+		return nil, fmt.Errorf("github.com/howdy-gleam/howdy has no release tag v%s to read them from", release)
 	case resp.StatusCode != http.StatusOK:
 		return nil, fmt.Errorf("could not read them from GitHub: GET %s: %s", url, resp.Status)
 	}

@@ -1,6 +1,6 @@
 # howdy CLI
 
-The command line for the [Howdy](https://github.com/mikeyjones/howdy) web framework, written in Go.
+The command line for the [Howdy](https://github.com/howdy-gleam/howdy) web framework, written in Go.
 
 ```sh
 howdy new <project_name>
@@ -26,7 +26,7 @@ controller rendered itself is kept.
 
 `main` starts the server in a supervision tree owned by an OTP application,
 `<project>_server`, as the
-[supervision guide](https://github.com/mikeyjones/howdy/blob/v1.0.0/docs/guides/supervision.djot)
+[supervision guide](https://github.com/howdy-gleam/howdy/blob/v1.0.0/docs/guides/supervision.djot)
 describes: a crashed server is restarted, and stopping the node, as
 `SIGTERM` does, lets requests in flight finish. `howdy add` puts the
 processes its packages keep running in the same tree, ahead of the server:
@@ -143,7 +143,7 @@ with each release. For a release newer than that copy it reads
 `releases/releases.json` at the release's tag on GitHub instead, so an
 older CLI can still make a project on a newer release.
 
-`--source git` takes them from `https://github.com/mikeyjones/howdy.git`
+`--source git` takes them from `https://github.com/howdy-gleam/howdy.git`
 at the release tag instead, never a branch, which needs Git installed; the
 Dockerfile then installs Git too. Use it for a release that is not on Hex,
 or with `repository` in the config file for a fork or private mirror.

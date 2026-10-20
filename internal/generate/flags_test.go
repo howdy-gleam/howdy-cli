@@ -37,7 +37,7 @@ func TestAddFlags(t *testing.T) {
 		addFlags(t, p)
 		label := c.db.Label()
 		for path, wants := range map[string][]string{
-			"gleam.toml": {`howdy_flags = { git = "https://github.com/mikeyjones/howdy.git", ref = "v` + scaffold.Release + `", path = "flags" }`},
+			"gleam.toml": {`howdy_flags = { git = "https://github.com/howdy-gleam/howdy.git", ref = "v` + scaffold.Release + `", path = "flags" }`},
 			"src/demo_site.gleam": {
 				"Services(db: Repo, features: flags.Flags)",
 				"let #(features, flag_keeper) = feature_flags.supervised(db)\n  let services = Services(db:, features:)",

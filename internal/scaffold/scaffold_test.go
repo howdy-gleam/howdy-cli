@@ -77,9 +77,9 @@ func TestWriteRendersProject(t *testing.T) {
 	toml, _ := os.ReadFile(filepath.Join(p.Dir, "gleam.toml"))
 	for _, line := range []string{
 		`name = "demo_site"`,
-		`howdy = { git = "https://github.com/mikeyjones/howdy.git", ref = "v` + Release + `" }`,
-		`howdy_ui = { git = "https://github.com/mikeyjones/howdy.git", ref = "v` + Release + `", path = "ui" }`,
-		`howdy_dev = { git = "https://github.com/mikeyjones/howdy.git", ref = "v` + Release + `", path = "howdy_dev" }`,
+		`howdy = { git = "https://github.com/howdy-gleam/howdy.git", ref = "v` + Release + `" }`,
+		`howdy_ui = { git = "https://github.com/howdy-gleam/howdy.git", ref = "v` + Release + `", path = "ui" }`,
+		`howdy_dev = { git = "https://github.com/howdy-gleam/howdy.git", ref = "v` + Release + `", path = "howdy_dev" }`,
 	} {
 		if !strings.Contains(string(toml), line) {
 			t.Errorf("gleam.toml missing %q", line)
@@ -287,7 +287,7 @@ func TestProjectsDependOnOneRelease(t *testing.T) {
 			}
 			if f.Path == "gleam.toml" {
 				refs := strings.Count(content, `ref = "v2.3.1"`)
-				howdy := strings.Count(content, "mikeyjones/howdy.git")
+				howdy := strings.Count(content, "howdy-gleam/howdy.git")
 				if refs == 0 || refs != howdy {
 					t.Errorf("gleam.toml (%s): %d of %d Howdy packages on v2.3.1", db.Label(), refs, howdy)
 				}
@@ -311,7 +311,7 @@ func TestRepositoryReplacesTheHowdyRepository(t *testing.T) {
 	}
 	for _, f := range files {
 		content := string(f.Content)
-		if strings.Contains(content, "mikeyjones/howdy.git") {
+		if strings.Contains(content, "howdy-gleam/howdy.git") {
 			t.Errorf("%s still takes packages from %s", f.Path, Repository)
 		}
 		if f.Path == "gleam.toml" && !strings.Contains(content, `howdy = { git = "https://git.example.com/me/howdy.git", ref = "v`+Release+`" }`) {
@@ -385,8 +385,8 @@ func TestFullProject(t *testing.T) {
 		}
 		for path, wants := range map[string][]string{
 			"gleam.toml": {
-				`howdy_telemetry = { git = "https://github.com/mikeyjones/howdy.git", ref = "v` + Release + `", path = "telemetry" }`,
-				`howdy_admin = { git = "https://github.com/mikeyjones/howdy.git", ref = "v` + Release + `", path = "admin" }`,
+				`howdy_telemetry = { git = "https://github.com/howdy-gleam/howdy.git", ref = "v` + Release + `", path = "telemetry" }`,
+				`howdy_admin = { git = "https://github.com/howdy-gleam/howdy.git", ref = "v` + Release + `", path = "admin" }`,
 				`gsh = ">= 1.3.0 and < 2.0.0"`,
 				`imports = ["console", "gleam/list", "gleam/option", "gleam/result"]`,
 			},

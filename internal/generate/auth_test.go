@@ -45,7 +45,7 @@ func TestAddAuth(t *testing.T) {
 			t.Errorf("%s: mail should be added exactly when the project has none", label)
 		}
 		for path, wants := range map[string][]string{
-			"gleam.toml": {`howdy_auth = { git = "https://github.com/mikeyjones/howdy.git", ref = "v` + scaffold.Release + `", path = "auth" }`, "howdy_mail = "},
+			"gleam.toml": {`howdy_auth = { git = "https://github.com/howdy-gleam/howdy.git", ref = "v` + scaffold.Release + `", path = "auth" }`, "howdy_mail = "},
 			"src/demo_site.gleam": {
 				"mailer: mail.Mailer, identity: auth.Auth, permissions: access.Authorization)",
 				"let identity = accounts.identity(db, mailer)\n  let permissions = accounts.permissions(db)\n  let services = Services(db:, mailer:, identity:, permissions:)",

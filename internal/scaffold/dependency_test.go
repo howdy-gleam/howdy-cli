@@ -21,9 +21,9 @@ func TestDependency(t *testing.T) {
 		source    Source
 		pkg, want string
 	}{
-		{git, "howdy", `howdy = { git = "https://github.com/mikeyjones/howdy.git", ref = "v1.0.0" }`},
-		{git, "howdy_ui", `howdy_ui = { git = "https://github.com/mikeyjones/howdy.git", ref = "v1.0.0", path = "ui" }`},
-		{git, "howdy_dev", `howdy_dev = { git = "https://github.com/mikeyjones/howdy.git", ref = "v1.0.0", path = "howdy_dev" }`},
+		{git, "howdy", `howdy = { git = "https://github.com/howdy-gleam/howdy.git", ref = "v1.0.0" }`},
+		{git, "howdy_ui", `howdy_ui = { git = "https://github.com/howdy-gleam/howdy.git", ref = "v1.0.0", path = "ui" }`},
+		{git, "howdy_dev", `howdy_dev = { git = "https://github.com/howdy-gleam/howdy.git", ref = "v1.0.0", path = "howdy_dev" }`},
 		{hex, "howdy", `howdy = ">= 1.0.0 and < 2.0.0"`},
 		{hex, "howdy_dev", `howdy_dev = ">= 1.0.0 and < 2.0.0"`},
 	} {
@@ -138,7 +138,7 @@ func TestHexSource(t *testing.T) {
 				if !strings.HasSuffix(f.Path, ".md") && f.Path != "gleam.toml" {
 					continue
 				}
-				for _, gitOnly := range []string{"github.com/mikeyjones/howdy", "tag `v", "ref = "} {
+				for _, gitOnly := range []string{"github.com/howdy-gleam/howdy", "tag `v", "ref = "} {
 					if strings.Contains(content, gitOnly) {
 						t.Errorf("%s (%s, api %v) mentions %q in a project on Hex", f.Path, db, api, gitOnly)
 					}

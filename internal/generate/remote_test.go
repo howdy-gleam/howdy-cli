@@ -44,7 +44,7 @@ func TestAddRemote(t *testing.T) {
 			services, made, test = "Services(rpc_token: String)", "let services = Services(rpc_token:)", "support.app()"
 		}
 		for path, wants := range map[string][]string{
-			"gleam.toml": {`howdy_remote = { git = "https://github.com/mikeyjones/howdy.git", ref = "v` + scaffold.Release + `", path = "remote" }`},
+			"gleam.toml": {`howdy_remote = { git = "https://github.com/howdy-gleam/howdy.git", ref = "v` + scaffold.Release + `", path = "remote" }`},
 			"src/demo_site.gleam": {
 				services,
 				"pub fn app(services: Services)",

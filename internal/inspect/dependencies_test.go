@@ -8,7 +8,7 @@ import (
 	"howdy/internal/scaffold"
 )
 
-const howdyRepo = "https://github.com/mikeyjones/howdy.git"
+const howdyRepo = "https://github.com/howdy-gleam/howdy.git"
 
 // dependencyProject writes a project that depends on howdy, with
 // howdy_admin, which brings in howdy_flags, as a dev dependency, and the
