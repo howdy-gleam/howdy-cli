@@ -1,0 +1,50 @@
+//// Background jobs, with Howdy Jobs: work done outside the request, kept
+//// in the app's database until it is done. `main` and `dev/` start the
+//// runner beside the server, from `jobs_runner` in `src/{{.Name}}.gleam`.
+////
+//// Define each kind of job here, then teach `runner` to do it. Queue one
+//// inside the transaction that makes it necessary, so it exists only if
+//// that change was committed:
+////
+////     jobs.new(background_jobs.say_hello(), "Ada") |> jobs.insert(into: conn)
+////
+//// A job is done at least once: a node that stops halfway leaves it for
+//// another to run again, so make doing one twice harmless. Manage them
+//// with `gleam run -m tasks/jobs help`. Restart `gleam dev` after changing
+//// this file, as the runner keeps the code it started with.
+
+import gleam/dynamic/decode
+import gleam/json
+import gleam/result
+import gloo/repo.{type Repo}
+import howdy/jobs
+import howdy/migration
+import howdy/service
+import logging
+
+/// An example job, with a name as its arguments. Arguments are stored as
+/// JSON, so keep them small, such as IDs, and read the rest when it runs.
+/// Never rename a job once some have been queued under its name.
+pub fn say_hello() -> jobs.Job(String) {
+  jobs.define("say_hello", encode: json.string, decoder: decode.string)
+}
+
+/// Which queues to take jobs from, how many to run at once on each node,
+/// and the code for each kind of job. A handler says what came of each
+/// attempt: `Done`, `Retry`, `RetryIn`, `Snooze`, `Cancel` or `GiveUp`.
+pub fn runner(db: Repo) -> jobs.Runner {
+  jobs.runner(db)
+  |> jobs.queue("default", concurrency: 10)
+  |> jobs.handle(say_hello(), fn(name, _attempt) {
+    logging.log(logging.Info, "Hello, " <> name <> "!")
+    jobs.Done
+  })
+}
+
+/// Create the jobs' table, or bring it up to date. It is named
+/// `howdy_jobs`, and kept by `howdy/migration` beside the app's own
+/// migrations.
+pub fn migrate(db: Repo) -> Result(Nil, String) {
+  migration.run(db, [jobs.schema()])
+  |> result.map_error(service.message)
+}

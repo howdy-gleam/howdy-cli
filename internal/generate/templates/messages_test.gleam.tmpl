@@ -1,0 +1,15 @@
+import howdy/i18n
+import {{.Name}}/messages
+
+pub fn messages_are_written_for_the_locale_test() {
+  let t = i18n.new("en")
+  assert messages.greeting(t, name: "Ada") == "Hello, Ada!"
+  assert messages.items(t, count: 0) == "No items"
+  assert messages.items(t, count: 1) == "1 item"
+  assert messages.items(t, count: 1200) == "1,200 items"
+}
+
+// A locale without a catalogue of its own falls back to the source's words.
+pub fn other_locales_fall_back_test() {
+  assert messages.greeting(i18n.new("fr-CA"), name: "Ada") == "Hello, Ada!"
+}

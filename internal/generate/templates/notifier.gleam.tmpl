@@ -1,0 +1,94 @@
+//// Notifications, with Howdy Notifications: an inbox for each user, kept
+//// in the app's database until read, pushed live to every page they have
+//// open, and emailed too for the kinds that call for it. The notifier is
+//// `notifier` in the app's services. Send once the change it is about has
+//// been committed:
+////
+////     notifications.draft("comment.created", "Ana commented on your post")
+////     |> notifications.body("Looks good to me!")
+////     |> notifications.link("/posts/42")
+////     |> notifications.send(services.notifier, to: user_id)
+////
+//// Email goes out as a background job, done by the app's jobs runner.
+//// `routes` serves each user their inbox at `/notifications`, which
+//// howdy_ui's bell follows: `bell.new(id: "inbox", source: "/notifications")`.
+
+import dot_env/env
+import gleam/option
+import gleam/result
+import gloo/repo.{type Repo}
+{{- if .Auth}}
+import howdy/auth
+{{- end}}
+import howdy/controller.{type Controller}
+import howdy/mail
+import howdy/migration
+import howdy/notifications.{Delivery, EmailNow, default_delivery}
+import howdy/service
+
+/// The app's notifier. Make it once, at startup, after `migrate`.
+pub fn new(db: Repo, mailer: mail.Mailer) -> notifications.Notifier {
+  let origin = env.get_string_or("APP_ORIGIN", "http://127.0.0.1:8787")
+  notifications.new(db)
+  |> notifications.with_base_url(origin)
+  // How each kind reaches people unless they choose otherwise: in the
+  // inbox, and by Web Push once set up. Kinds that matter more are emailed
+  // too.
+  |> notifications.with_defaults(fn(kind) {
+    case kind {
+      "security." <> _ -> Delivery(..default_delivery, email: EmailNow)
+      _ -> default_delivery
+    }
+  })
+  // Someone reading the app as it arrives does not need an email as well.
+  |> notifications.email_after(120)
+  |> notifications.with_email(mailer, address: address, render: fn(sent) {
+    mail.message()
+    |> mail.subject(sent.title)
+    |> mail.text(
+      sent.body <> "\n\n" <> origin <> option.unwrap(sent.link, "/"),
+    )
+  })
+}
+
+/// The email address of the user a notification is for, or `Error(Nil)`
+/// to send them none.
+fn address(_user_id: String) -> Result(mail.Address, Nil) {
+  // Look the user up here, such as with
+  // users.get(identity, user_id) |> result.map(fn(user) { mail.address(user.email) })
+  Error(Nil)
+}
+
+/// Each user's inbox, at `/notifications`: list it, follow it as
+/// server-sent events, and mark notifications read. See
+/// `notifications.routes` for the routes.
+{{- if .Auth}}
+pub fn routes(
+  notifier: notifications.Notifier,
+  identity: auth.Auth,
+) -> Controller {
+  notifications.routes(notifier, at: "/notifications", identify: fn(ctx) {
+    // Signed in, from this site: it also refuses cross-site writes.
+    auth.required(identity)(ctx)
+    |> result.map(fn(principal) { principal.user.id })
+  })
+}
+{{- else}}
+pub fn routes(notifier: notifications.Notifier) -> Controller {
+  notifications.routes(notifier, at: "/notifications", identify: fn(_ctx) {
+    // Name the signed-in user here, and refuse cross-site requests. With
+    // Howdy Auth (`howdy add auth`), that is:
+    //   auth.required(identity)(ctx) |> result.map(fn(p) { p.user.id })
+    // Until then every request is refused.
+    Error(service.Unauthorized)
+  })
+}
+{{- end}}
+
+/// Create the notifications' tables, or bring them up to date. They are
+/// named `howdy_notifications_*`, and kept by `howdy/migration` beside the
+/// app's own migrations.
+pub fn migrate(db: Repo) -> Result(Nil, String) {
+  migration.run(db, [notifications.schema()])
+  |> result.map_error(service.message)
+}

@@ -1,0 +1,73 @@
+//// `howdy db seed --reset`: drops every table in the development
+//// database, then migrates and seeds it as `howdy db seed` does. It uses
+//// `.env` and `{{if eq .Database "postgres"}}DATABASE_URL{{else}}DATABASE_PATH{{end}}` like the app, so never point that at data
+//// you want to keep.
+{{if eq .Database "postgres"}}
+import gleam/result
+import gloo/error.{type GlooError}
+import gloo/repo.{type Repo}
+import {{.Name}}
+import {{.Name}}/platform/database
+import seed
+
+pub fn main() -> Nil {
+  {{.Name}}.load_environment()
+  let db = {{.Name}}.database()
+  let assert Ok(_) = drop_everything(db)
+  let assert Ok(_) = database.migrate(db)
+  seed.seed(db)
+}
+
+/// Drops the public schema and makes it again, taking every table, and
+/// the migrations' own records, with it.
+fn drop_everything(db: Repo) -> Result(Nil, GlooError) {
+  use _ <- result.try(repo.execute(db, "DROP SCHEMA IF EXISTS public CASCADE", []))
+  use _ <- result.try(repo.execute(db, "CREATE SCHEMA public", []))
+  Ok(Nil)
+}
+{{- else}}
+import gleam/dynamic/decode
+import gleam/list
+import gleam/result
+import gloo/error.{type GlooError}
+import gloo/repo.{type Repo}
+import {{.Name}}
+import {{.Name}}/platform/database
+import seed
+
+pub fn main() -> Nil {
+  {{.Name}}.load_environment()
+  let db = {{.Name}}.database()
+  let assert Ok(_) = drop_everything(db)
+  let assert Ok(_) = database.migrate(db)
+  seed.seed(db)
+}
+
+/// Drops every table and view, and the migrations' own records with them.
+/// The file stays, so a running `gleam dev` carries on with the fresh
+/// database.
+fn drop_everything(db: Repo) -> Result(Nil, GlooError) {
+  let decoder = {
+    use kind <- decode.field(0, decode.string)
+    use name <- decode.field(1, decode.string)
+    decode.success(#(kind, name))
+  }
+  use objects <- result.try(repo.all(
+    db,
+    "SELECT type, name FROM sqlite_master
+     WHERE type IN ('table', 'view') AND name NOT LIKE 'sqlite_%'",
+    [],
+    decoder,
+  ))
+  // Otherwise a table cannot be dropped while another refers to it.
+  use _ <- result.try(repo.execute(db, "PRAGMA foreign_keys = OFF", []))
+  use _ <- result.try(
+    list.try_each(objects, fn(object) {
+      let #(kind, name) = object
+      repo.execute(db, "DROP " <> kind <> " IF EXISTS \"" <> name <> "\"", [])
+    }),
+  )
+  use _ <- result.try(repo.execute(db, "PRAGMA foreign_keys = ON", []))
+  Ok(Nil)
+}
+{{- end}}

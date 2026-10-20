@@ -1,0 +1,53 @@
+//// Builds valid todos for tests and `dev/seed.gleam`:
+////
+////     let item = todo_factory.insert(db, todo_factory.input())
+////     let milk =
+////       todo_factory.insert(db, TodoInput(..todo_factory.input(), title: "Milk"))
+////     let items = todo_factory.insert_many(db, 3, fn(input) { input })
+////
+//// Everything goes through `todo_item.validate`, as a request would. Code
+//// in `dev/` is never part of `gleam run` or a deployment.
+
+import gleam/int
+import gloo/repo.{type Repo}
+import {{.Name}}/features/todos/todo_item.{type Todo, type TodoInput}
+import {{.Name}}/features/todos/todos
+
+/// Input that passes validation, numbered so that no two are the same.
+pub fn input() -> TodoInput {
+  let n = int.to_string(sequence())
+  todo_item.TodoInput(title: "Todo " <> n)
+}
+
+/// Validates the input and inserts it, crashing if either fails.
+pub fn insert(db: Repo, input: TodoInput) -> Todo {
+  let assert Ok(valid) = todo_item.validate(input)
+  let assert Ok(item) = todos.create(db, valid)
+  item
+}
+
+/// Inserts `count` todos, each made from a fresh `input()` by `with`.
+pub fn insert_many(
+  db: Repo,
+  count: Int,
+  with: fn(TodoInput) -> TodoInput,
+) -> List(Todo) {
+  case count > 0 {
+    True -> [insert(db, with(input())), ..insert_many(db, count - 1, with)]
+    False -> []
+  }
+}
+
+// A number above any an earlier call in this run returned.
+fn sequence() -> Int {
+  unique_integer([Positive, Monotonic])
+}
+
+// The constructors are the atoms erlang:unique_integer/1 takes.
+type UniqueOption {
+  Positive
+  Monotonic
+}
+
+@external(erlang, "erlang", "unique_integer")
+fn unique_integer(options: List(UniqueOption)) -> Int

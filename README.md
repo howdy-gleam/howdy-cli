@@ -8,14 +8,14 @@ howdy new <project_name>
 
 creates a Gleam project with a themed home page built from Howdy UI, static
 assets, hot reload for development (`gleam dev`), and a test suite. By
-default it also includes a SQLite database through Gloo with an example todo
-list: a migration, a `todos` slice (record, database operations, JSON API at
-`/api/todos`), and a live todo list on the home page rendered as a Lustre
-server component. Pass `--database postgres` for the same project on
-PostgreSQL: Gloo connects through a pog pool configured from `DATABASE_URL`,
-and the project gets a `docker-compose.yml` that starts PostgreSQL with a
-development and a test database. `--database sqlite` is the default, and
-`--no-database` gives a page-only project. The layout is a trimmed-down
+default it also includes a PostgreSQL database through Gloo with an example
+todo list: a migration, a `todos` slice (record, database operations, JSON API
+at `/api/todos`), and a live todo list on the home page rendered as a Lustre
+server component. Gloo connects through a pog pool configured from
+`DATABASE_URL`, and the project gets a `docker-compose.yml` that starts
+PostgreSQL with a development and a test database. `--database postgres` is
+the default; pass `--database sqlite` for the same project on a SQLite file
+instead, and `--no-database` for a page-only project. The layout is a trimmed-down
 version of `howdy_example`.
 
 Every project has a 404 page, `features/home/pages/not_found_page.gleam`, rendered
@@ -23,6 +23,16 @@ with its default layout. Middleware in `platform/not_found.gleam` shows it
 for a 404 when the request's `Accept` header prefers HTML, as a browser's
 does; API clients, `fetch` and curl get Howdy's JSON error, and a 404 page a
 controller rendered itself is kept.
+
+`main` starts the server in a supervision tree owned by an OTP application,
+`<project>_server`, as the
+[supervision guide](https://github.com/mikeyjones/howdy/blob/v1.0.0/docs/guides/supervision.djot)
+describes: a crashed server is restarted, and stopping the node, as
+`SIGTERM` does, lets requests in flight finish. `howdy add` puts the
+processes its packages keep running in the same tree, ahead of the server:
+the feature flag keeper, the jobs runner and the remote procedure server.
+In a project whose `main` still calls `howdy.start` they are started beside
+it instead.
 
 Every project is also set up for development with the rest of Howdy:
 
@@ -83,6 +93,33 @@ database it keeps the todos JSON API, and it combines with `--minimal` and
 and `howdy add auth` mounts only auth's JSON API, with emails that carry
 a code rather than a link to a page.
 
+Pass `--with` to set up more Howdy packages as the project is made, each
+added and wired in exactly as the matching [`howdy add`](#adding-packages)
+command would:
+
+```sh
+howdy new my_site --with auth,storage,jobs,notifications,i18n
+```
+
+| Package | Sets up |
+| --- | --- |
+| `mail` | `howdy_mail`: a mailer in the services, an example email, and the dev outbox |
+| `auth` | `howdy_auth`: sign-in by emailed link or code, and roles; brings mail |
+| `flags` | `howdy_flags`: feature flags kept in the database, `tasks/flags` |
+| `storage` | `howdy_storage`: `files` in the services, an S3-compatible bucket or a local folder |
+| `jobs` | `howdy_jobs`: background jobs in the database, a runner beside the server, `tasks/jobs` |
+| `notifications` | `howdy_notifications`: an inbox per user at `/notifications`, emailed by jobs; brings mail and jobs |
+| `i18n` | `howdy_i18n`: catalogues in `locales/`, a generated `messages` module, each request's locale |
+| `openapi` | `howdy_openapi`: an OpenAPI document at `/openapi.json`, read at `/docs` |
+| `remote` | `howdy_remote`: typed calls between services, over the cluster or `POST /rpc/...` |
+
+They are added in that order whatever order they are given in, so mail is
+shared, and with `auth` the notifications inbox asks it who is signed in.
+`auth`, `flags`, `jobs` and `notifications` keep their data in the
+database, so they are refused with `--no-database`. With `--dry-run` the
+project is made in a temporary directory to list every file the packages
+add.
+
 Before writing anything it checks that `gleam` is installed (and warns if
 `erl` is missing), writes the files, formats them with `gleam format`,
 downloads dependencies,
@@ -100,9 +137,63 @@ to use another; a release the templates predate may need changes to the
 generated code. When a Howdy release changes what a project needs, update
 the templates and `scaffold.Release` together.
 
+`--source hex` takes the packages from Hex instead: each one is written as
+a version range, from its version in the release up to its next major
+(`howdy_ui = ">= 1.0.0 and < 2.0.0"`). Howdy packages are versioned
+separately, so the CLI keeps a copy of the Howdy repository's
+`releases/releases.json` in `internal/scaffold/releases.json` and only knows
+the Hex versions of the releases listed there; copy it over with each
+release. `--source git` is the default until the packages are on Hex;
+`scaffold.DefaultSource` in `internal/scaffold/dependency.go` switches it.
+`howdy add` follows the project: it reads whether `howdy` comes from Git or
+Hex in `gleam.toml` and adds its package the same way.
+
 Project names follow Gleam's rules: lowercase letters, digits and
 underscores, starting with a letter. A path such as `apps/my_site` is
 accepted; the last segment becomes the project name.
+
+## Config file
+
+Your own defaults for `howdy new` can live in an optional TOML file, so
+you need not pass the same flags every time. howdy reads the first of
+these there is:
+
+| OS | Path |
+| --- | --- |
+| Linux | `$XDG_CONFIG_HOME/howdy/config.toml`, or `~/.config/howdy/config.toml` |
+| macOS | `~/Library/Application Support/howdy/config.toml`, then `~/.config/howdy/config.toml` |
+| Windows | `%AppData%\howdy\config.toml` |
+
+Set `HOWDY_CONFIG` to read another file instead (handy for CI), or to
+`none` to read none. `howdy config init` writes a file with every setting
+commented out at howdy's own default, and `howdy config` (or `howdy config
+--json`) shows which file is in use and where each default comes from.
+
+```toml
+[new]
+source = "hex"                # git or hex, as --source
+howdy = "1.0.0"               # the Howdy release every package comes from, as --howdy
+repository = "https://git.example.com/me/howdy.git"  # a fork or private mirror, for source = "git"
+database = "sqlite"           # postgres, sqlite or none
+with = ["mail", "auth"]       # packages to set up, as --with
+minimal = false               # as --minimal
+api_only = false              # as --api-only
+agents = true                 # false for --no-agents
+docker = true                 # false for --no-docker
+skip_deps = false             # as --skip-deps
+```
+
+A flag on the command line always wins over the file: `--database
+postgres` beats `database = "none"`, `--with ""` sets up no packages, and
+a boolean is turned back with `--minimal=false` or `--no-agents=false`.
+`howdy new --no-config` ignores the file altogether, and a project made
+from it says which file it read. Every setting is checked, used or not,
+and one howdy does not know is an error, so a misspelt key is not quietly
+ignored. Leave `howdy` out to follow the release the templates are written
+for as howdy is upgraded; set it to stay on one. Each Howdy package's
+version comes from the release, so they always match. `howdy add` follows
+the project rather than the file, adding each package from wherever
+`gleam.toml` takes `howdy`, a custom `repository` included.
 
 ## Adding a controller
 
@@ -134,7 +225,9 @@ module; the second (singular) names the record module and type. Fields are
 is a string, and every record gets an integer `id`. The command also writes
 `migrations/create_users.gleam` with the next migration version and tests
 in `test/<project>/features/users/` (`users_test.gleam` for the database operations,
-`users_controller_test.gleam` for the routes), registers the controller
+`users_controller_test.gleam` for the routes), a factory in
+`dev/<project>/factories/user_factory.gleam` (see
+[Test data and seeds](#test-data-and-seeds)), registers the controller
 in `src/<project>.gleam` and the migration in `platform/database.gleam`,
 and runs `gleam format`. If either of those two files no longer has the
 shape `howdy new` gave it, it is left alone and the command prints what to
@@ -225,6 +318,43 @@ howdy create live_page blog editor
 does the same with a live section on the page: a Lustre server component
 with its model, update and view in the page module, and its WebSocket
 routed at `/blog/editor/live`.
+
+## Test data and seeds
+
+Every record `howdy create controller`, `pages` and `repo` make gets a
+factory in `dev/<project>/factories/`, beside the `gleam dev` entry point.
+Code in `dev/` can be imported by tests and run with `gleam run -m`, but
+`gleam run` and `gleam export erlang-shipment` leave it out, so test data
+never ships:
+
+```gleam
+import my_app/factories/user_factory
+import my_app/features/users/user.{UserInput}
+
+let ada = user_factory.insert(db, UserInput(..user_factory.input(), name: "Ada"))
+let others = user_factory.insert_many(db, 3, fn(input) { input })
+```
+
+`input()` is input that passes the record's validation, with strings
+numbered (`"Name 1"`, `"Name 2"`) so values in unique columns stay apart;
+change fields with Gleam's record update syntax. `insert` validates the
+input and inserts it through the feature's `create`, crashing if either
+fails, and `insert_many` inserts several, each changed by the function.
+Edit `input()` when you add validation rules the samples break.
+
+```sh
+howdy db seed
+howdy db seed --reset
+```
+
+migrates the database `.env` names and runs `dev/seed.gleam`, whose `seed`
+function inserts the records to start with; new projects seed a few todos.
+Seeding again inserts them again, so `--reset` drops every table first
+(on PostgreSQL, the `public` schema), then migrates and seeds. It deletes
+everything in that database, so never point `.env` at data you want to
+keep. A project made before `howdy db seed` existed gets `dev/seed.gleam`
+and `dev/seed/reset.gleam` the first time it runs. `howdy db migrate`
+applies pending migrations without seeding, like `gleam run -m tasks/migrate`.
 
 ## Layouts
 
@@ -423,6 +553,82 @@ gets Flags: kill switches, rules, groups and history. Check a flag with
 flags.user(id))`.
 
 ```sh
+howdy add storage
+```
+
+adds file storage with `howdy_storage`, and writes:
+
+| File | Holds |
+| --- | --- |
+| `src/<project>/platform/file_storage.gleam` | `from_env`, which makes the app's storage, and `serve`, which answers its URLs |
+| `test/<project>/platform/file_storage_test.gleam` | stores and reads a file in memory |
+
+The storage is `files` in the services. With `S3_BUCKET` (or `BUCKET_NAME`)
+set it is that bucket, on AWS S3 or any S3-compatible service, reached with
+the standard `AWS_*` variables; otherwise it is the folder `STORAGE_PATH`,
+`storage/` unless set (added to `.gitignore`). The folder's signed URLs are
+served at `/files`, ahead of the static catch-all, once `STORAGE_SECRET` is
+set; without it the folder gives no URLs and `gleam run` warns. The test
+support keeps files in memory. `.env.example` lists every variable.
+
+```sh
+howdy add jobs
+```
+
+adds background jobs with `howdy_jobs`. It needs the project's database,
+where the jobs are kept, and refuses a project without one. It writes:
+
+| File | Holds |
+| --- | --- |
+| `src/<project>/background_jobs.gleam` | the jobs, with an example `say_hello`, the `runner` that does them, and `migrate` |
+| `src/tasks/jobs.gleam` | manages them from a terminal: `gleam run -m tasks/jobs help` |
+| `test/<project>/background_jobs_test.gleam` | queues the example and does it with `jobs.drain` |
+
+`src/<project>.gleam` gets `jobs_runner(services)`, which `main` and the
+dev server start beside the server, and `platform/database.gleam`'s
+`migrate` runs the jobs' migrations after the app's own. With the dev admin,
+`/_howdy` gets Jobs: queues, schedules, and every job with its failures.
+Queue a job in the transaction that needs it, `jobs.new(job, args) |>
+jobs.insert(into: conn)`. The runner keeps the code it started with, so
+restart `gleam dev` after changing `background_jobs.gleam`.
+
+```sh
+howdy add notifications
+```
+
+adds notifications with `howdy_notifications`: an inbox for each user,
+kept in the database, pushed live to their open pages and emailed for the
+kinds that call for it. It needs the project's database, and as email goes
+out as background jobs, a project without mail or jobs gets them as well. It
+writes `src/<project>/platform/notifier.gleam`, which makes the `notifier`
+and serves each user's inbox at `/notifications` (the routes howdy_ui's
+bell follows), and its test. The notifier is in the services in `main`, the
+dev server and the test support, `jobs_runner` delivers its email, and its
+migrations run after the app's own. The inbox must know who is signed in:
+in a project with auth it asks `auth.required(services.identity)`; without,
+it refuses every request until `routes` in `notifier.gleam` says.
+
+```sh
+howdy add i18n
+```
+
+adds translations with `howdy_i18n`, and writes:
+
+| File | Holds |
+| --- | --- |
+| `locales/en.json` | the source catalogue, in ICU MessageFormat |
+| `src/<project>/messages.gleam` | a function for each message, generated from `locales/` |
+| `src/<project>/platform/locales.gleam` | the negotiator choosing each request's locale, and `translator(ctx)` |
+| `test/<project>/messages_test.gleam` | checks the messages |
+
+The app stamps every response with its locale (`content-language`, and
+`vary` for caches), chosen from `?locale=`, the `locale` cookie and the
+browser's languages. The dev server watches `locales/` and regenerates
+`messages.gleam` before each build; otherwise run
+`gleam run -m howdy/i18n/cli -- gen`, and add a language with
+`gleam run -m howdy/i18n/cli -- add de`.
+
+```sh
 howdy add docker
 ```
 
@@ -570,8 +776,9 @@ go install .
 ```text
 main.go
 internal/
-├── cli/        cobra commands (root, new, create, add, dev, routes, check, upgrade), and the --json and --dry-run output
-├── generate/   `howdy create controller`, `pages`, `repo`, `migration`, `page`, `live_page`, `layout`, `component`, `live_component` and `email`, and `howdy add mail`, `auth`, `remote`, `openapi`, `flags` and `docker`: templates and wiring
+├── cli/        cobra commands (root, new, create, add, dev, db, routes, check, upgrade, config), and the --json and --dry-run output
+├── config/     finding and reading the optional config file of defaults for `howdy new`
+├── generate/   `howdy create controller`, `pages`, `repo`, `migration`, `page`, `live_page`, `layout`, `component`, `live_component` and `email`, and `howdy add mail`, `auth`, `remote`, `openapi`, `flags`, `storage`, `jobs`, `notifications`, `i18n` and `docker`: templates and wiring
 ├── inspect/    reading a project's sources for `howdy routes`
 ├── scaffold/   project validation and template rendering
 │   └── templates/

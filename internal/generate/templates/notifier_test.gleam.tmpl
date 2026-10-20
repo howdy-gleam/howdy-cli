@@ -1,0 +1,19 @@
+import gleam/option.{Some}
+import howdy/mail
+import howdy/mail/outbox
+import howdy/notifications
+import {{.Name}}/platform/notifier
+import {{.Name}}/support
+
+pub fn a_notification_waits_in_the_inbox_until_read_test() {
+  use db <- support.with_db()
+  let notifier = notifier.new(db, mail.mailer(outbox.adapter(outbox.start())))
+  let assert Ok(Some(sent)) =
+    notifications.draft("comment.created", "Ana commented on your post")
+    |> notifications.send(notifier, to: "42")
+  assert notifications.unread_count(notifier, "42") == Ok(1)
+  assert notifications.unread_count(notifier, "43") == Ok(0)
+
+  let assert Ok(_) = notifications.mark_read(notifier, "42", sent.id)
+  assert notifications.unread_count(notifier, "42") == Ok(0)
+}

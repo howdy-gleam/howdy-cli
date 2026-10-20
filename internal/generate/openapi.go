@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"howdy/internal/scaffold"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -14,8 +15,8 @@ import (
 // The existing controllers are left as they are; with the dev admin, the
 // admin finds the document by itself and lists the endpoints under API.
 type OpenAPI struct {
-	Project  *Project
-	Git, Ref string
+	Project *Project
+	scaffold.Source
 	// Admin reports whether the dev entry point mounts the admin.
 	Admin bool
 }
@@ -30,12 +31,12 @@ func NewOpenAPI(p *Project) (*OpenAPI, error) {
 	if dependency("howdy_openapi").Match(toml) {
 		return nil, errors.New("this project already has OpenAPI: howdy_openapi is in gleam.toml")
 	}
-	m := howdyDependency.FindSubmatch(toml)
-	if m == nil {
-		return nil, errors.New("gleam.toml does not take howdy from Git as 'howdy new' writes it (howdy = { git = \"...\", ref = \"...\" }), so the matching howdy_openapi is unknown; add howdy_openapi by hand")
+	source, err := howdySource(toml, "howdy_openapi")
+	if err != nil {
+		return nil, err
 	}
 	dev, _ := os.ReadFile(filepath.Join(p.Dir, p.devFile()))
-	return &OpenAPI{Project: p, Git: string(m[1]), Ref: string(m[2]), Admin: bytes.Contains(dev, []byte("admin.mount("))}, nil
+	return &OpenAPI{Project: p, Source: source, Admin: bytes.Contains(dev, []byte("admin.mount("))}, nil
 }
 
 // DocsFile is the module that describes and serves the document.
@@ -83,7 +84,7 @@ func (o *OpenAPI) Write() ([]string, error) {
 			return nil, fmt.Errorf("%s already exists; nothing was written", f.Path)
 		}
 	}
-	line := fmt.Sprintf("howdy_openapi = { git = %q, ref = %q, path = \"openapi\" }\n", o.Git, o.Ref)
+	line := o.Dependency("howdy_openapi") + "\n"
 	if err := insertDependencies(filepath.Join(p.Dir, "gleam.toml"), line); err != nil {
 		return nil, err
 	}

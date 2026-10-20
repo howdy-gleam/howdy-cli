@@ -1,0 +1,38 @@
+//// Which language each request is answered in, with Howdy's locales and
+//// Howdy I18n. The messages are in `locales/`, one catalogue per locale,
+//// such as `locales/en.json`; `messages.gleam` has a function for each,
+//// generated from them. A controller writes in the reader's language with:
+////
+////     let t = locales.translator(ctx)
+////     messages.greeting(t, name: "Ada")
+////
+//// `gleam dev` regenerates `messages.gleam` when a catalogue changes;
+//// otherwise run `gleam run -m howdy/i18n/cli -- gen`. Add a language with
+//// `gleam run -m howdy/i18n/cli -- add de`.
+
+import howdy/context.{type Context}
+import howdy/i18n
+import howdy/locale
+import {{.Name}}/messages
+
+/// The locales the app has catalogues for, and where to look for the one a
+/// request wants: `?locale=de`, then the `locale` cookie that
+/// `locale.remember` sets, then the browser's languages. The first that
+/// names a supported locale wins, and the source catalogue's when none does.
+pub fn negotiator() -> locale.Negotiator {
+  locale.negotiator(messages.locales, default: messages.source)
+  |> locale.from_query("locale")
+  |> locale.from_cookie("locale")
+  |> locale.from_accept_language
+}
+
+/// The locale a request wants, of those the app supports.
+pub fn detect(ctx: Context(guarded)) -> locale.Locale {
+  locale.detect(ctx, negotiator())
+}
+
+/// A translator for the request's locale, for `messages` and for formatting
+/// numbers and dates with `howdy/i18n/format`.
+pub fn translator(ctx: Context(guarded)) -> i18n.Translator {
+  i18n.new(locale.to_string(detect(ctx)))
+}

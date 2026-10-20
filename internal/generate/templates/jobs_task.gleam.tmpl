@@ -1,0 +1,16 @@
+//// Manage the app's background jobs from the command line:
+//// `gleam run -m tasks/jobs help`. It works on the database the app uses,
+//// through `.env` like the app, once it has been migrated
+//// (`gleam run -m tasks/migrate`).
+////
+////     gleam run -m tasks/jobs stats
+////     gleam run -m tasks/jobs list --state failed
+////     gleam run -m tasks/jobs retry --failed --queue default
+
+import howdy/jobs/cli
+import {{.Name}}
+
+pub fn main() -> Nil {
+  {{.Name}}.load_environment()
+  cli.main(fn() { Ok({{.Name}}.database()) })
+}

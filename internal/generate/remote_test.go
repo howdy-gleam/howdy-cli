@@ -49,7 +49,8 @@ func TestAddRemote(t *testing.T) {
 				services,
 				"pub fn app(services: Services)",
 				"howdy.new()\n  |> howdy.controller(rpc.controller(services.rpc_token))\n",
-				"rpc.start()\n  let rpc_token = rpc.token()\n  " + made,
+				"let rpc_token = rpc.token()\n  " + made,
+				"|> supervisor.add(rpc.supervised())\n    |> supervisor.add(howdy.supervised(configured(services)))",
 				"import demo_site/platform/rpc\n",
 			},
 			"src/demo_site/procedures.gleam":         {`"demo_site.ping"`},
@@ -65,6 +66,9 @@ func TestAddRemote(t *testing.T) {
 					t.Errorf("%s: %s should contain %q:\n%s", label, path, want, content)
 				}
 			}
+		}
+		if root := read(t, p, "src/demo_site.gleam"); strings.Contains(root, "rpc.start()") {
+			t.Errorf("%s: main should supervise the procedure server, not start it:\n%s", label, root)
 		}
 		if root := read(t, p, "src/demo_site.gleam"); strings.Contains(root, "_services") {
 			t.Errorf("%s: app should use its services now:\n%s", label, root)

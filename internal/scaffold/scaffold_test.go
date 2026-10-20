@@ -98,6 +98,9 @@ func TestWriteRendersProject(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(p.Dir, "src/demo_site/features/todos/todos.gleam")); err == nil {
 		t.Error("page-only project should not contain the todos slice")
 	}
+	if _, err := os.Stat(filepath.Join(p.Dir, "dev/seed.gleam")); err == nil {
+		t.Error("a project without a database has nothing to seed")
+	}
 }
 
 func TestDatabaseOverlay(t *testing.T) {
@@ -105,9 +108,10 @@ func TestDatabaseOverlay(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.Database != SQLite {
-		t.Fatal("database should be SQLite by default")
+	if p.Database != Postgres {
+		t.Fatal("database should be PostgreSQL by default")
 	}
+	p.Database = SQLite
 	files, err := p.Files()
 	if err != nil {
 		t.Fatal(err)
@@ -125,6 +129,7 @@ func TestDatabaseOverlay(t *testing.T) {
 		"src/demo_site/migrations/create_todos.gleam", "src/demo_site/platform/database.gleam",
 		"src/tasks/migrate.gleam", "test/demo_site/support.gleam",
 		"priv/public/assets/ui.css", "src/tasks/css.gleam",
+		"dev/seed.gleam", "dev/seed/reset.gleam", "dev/demo_site/factories/todo_factory.gleam",
 	} {
 		if _, ok := byPath[want]; !ok {
 			t.Errorf("missing %s", want)
@@ -145,9 +150,36 @@ func TestDatabaseOverlay(t *testing.T) {
 	if _, ok := byPath["docker-compose.yml"]; ok {
 		t.Error("a SQLite project should not get a docker-compose.yml")
 	}
+	if !strings.Contains(byPath["dev/seed.gleam"], "todo_factory.insert_many(db, 3,") {
+		t.Error("the seeds should insert todos through their factory")
+	}
+	if !strings.Contains(byPath["dev/seed/reset.gleam"], "FROM sqlite_master") {
+		t.Error("a SQLite reset should drop the tables sqlite_master lists")
+	}
 	for path, content := range byPath {
 		if strings.Contains(strings.ToLower(content), "postgres") {
 			t.Errorf("%s mentions postgres in a SQLite project", path)
+		}
+	}
+}
+
+func TestSeedFiles(t *testing.T) {
+	for _, database := range []Database{SQLite, Postgres} {
+		files, err := SeedFiles("demo_site", database)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(files) != 2 || files[0].Path != "dev/seed.gleam" || files[1].Path != "dev/seed/reset.gleam" {
+			t.Fatalf("files = %v", files)
+		}
+		seed := string(files[0].Content)
+		if strings.Contains(seed, "todo") || !strings.Contains(seed, "Nothing to seed yet") {
+			t.Errorf("seeds for an existing project should not assume the todo list:\n%s", seed)
+		}
+		for _, f := range files {
+			if strings.Contains(string(f.Content), "{{") {
+				t.Errorf("unrendered template markers in %s", f.Path)
+			}
 		}
 	}
 }
@@ -198,6 +230,8 @@ func TestPostgresOverlay(t *testing.T) {
 		"src/demo_site/features/todos/todos.gleam":     "sql.bool(done)",
 		"src/demo_site/features/todos/todo_item.gleam": "decode.field(2, decode.bool)",
 		"src/tasks/migrate.gleam":                      "`DATABASE_URL`",
+		"dev/seed.gleam":                               "`DATABASE_URL`",
+		"dev/seed/reset.gleam":                         "DROP SCHEMA IF EXISTS public CASCADE",
 		"test/demo_site/support.gleam":                 "TEST_DATABASE_URL",
 		// Shared with the SQLite project.
 		"src/demo_site/features/todos/todo_controller.gleam": "controller.new(\"api/todos\")",
@@ -215,12 +249,12 @@ func TestPostgresOverlay(t *testing.T) {
 }
 
 func TestParseRelease(t *testing.T) {
-	for in, want := range map[string]string{"2.1.0": "2.1.0", "v2.1.0": "2.1.0", " 10.0.3 ": "10.0.3"} {
+	for in, want := range map[string]string{"1.0.0": "1.0.0", "v1.0.0": "1.0.0", " 10.0.3 ": "10.0.3"} {
 		if got, err := ParseRelease(in); err != nil || got != want {
 			t.Errorf("ParseRelease(%q) = %q, %v; want %q", in, got, err, want)
 		}
 	}
-	for _, bad := range []string{"", "v2", "2.1", "main", "2.1.0-rc1", "2.1.0\"}"} {
+	for _, bad := range []string{"", "v1", "1.0", "main", "1.0.0-rc1", "1.0.0\"}"} {
 		if _, err := ParseRelease(bad); err == nil {
 			t.Errorf("ParseRelease(%q) should fail", bad)
 		}
@@ -261,6 +295,30 @@ func TestProjectsDependOnOneRelease(t *testing.T) {
 			if f.Path == "README.md" && !strings.Contains(content, "This project uses Howdy 2.3.1") {
 				t.Errorf("README.md (%s) does not say which release it uses", db.Label())
 			}
+		}
+	}
+}
+
+func TestRepositoryReplacesTheHowdyRepository(t *testing.T) {
+	p, err := New(filepath.Join(t.TempDir(), "demo_site"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.Repository = "https://git.example.com/me/howdy.git"
+	files, err := p.Files()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range files {
+		content := string(f.Content)
+		if strings.Contains(content, "mikeyjones/howdy.git") {
+			t.Errorf("%s still takes packages from %s", f.Path, Repository)
+		}
+		if f.Path == "gleam.toml" && !strings.Contains(content, `howdy = { git = "https://git.example.com/me/howdy.git", ref = "v`+Release+`" }`) {
+			t.Errorf("gleam.toml should take howdy from the repository:\n%s", content)
+		}
+		if f.Path == "README.md" && !strings.Contains(content, "from `https://git.example.com/me/howdy.git` at the Howdy") {
+			t.Error("README.md should say where the packages come from")
 		}
 	}
 }

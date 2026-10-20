@@ -31,6 +31,11 @@ func ErrorLine(msg string) string {
 	return styleBad.Render("✗ ") + msg
 }
 
+// Success formats a line saying a command did what it set out to.
+func Success(msg string) string {
+	return styleGood.Render("✓ ") + msg
+}
+
 // Command is a suggested next command with a short note.
 type Command struct {
 	Cmd  string
