@@ -1,0 +1,79 @@
+#!/bin/sh
+# Starts {{.Name}} from the Erlang shipment built by the Dockerfile, which
+# puts this script in the shipment's bin/ directory:
+#
+#   bin/start run       serve the app; what the image runs
+{{- if .Database}}
+#   bin/start migrate   apply pending migrations, then exit
+{{- end}}
+#   bin/start remote    an Erlang shell inside the running app
+#
+# Erlang distribution, for a cluster of nodes and for `remote`, is off
+# unless HOWDY_NODE_NAME is set:
+#
+#   HOWDY_NODE_NAME   this node's name, such as {{.Name}}@10.0.0.5
+#   HOWDY_COOKIE      the secret every node in the cluster shares
+#   HOWDY_DIST_PORT   the port distribution listens on, rather than any
+#
+# Anyone who can reach a node with the cookie can run any code in it, so
+# keep distribution on a private network.
+set -eu
+
+BASE=$(cd "$(dirname "$0")/.." && pwd)
+PACKAGE={{.Name}}
+COMMAND="${1:-run}"
+
+# Sets NAME_FLAGS to name this node, after writing the cookie to the file
+# Erlang reads it from: on the command line any process could read it.
+distribution() {
+  [ -n "${HOWDY_NODE_NAME:-}" ] || return 0
+  if [ -z "${HOWDY_COOKIE:-}" ]; then
+    echo "bin/start: HOWDY_NODE_NAME needs HOWDY_COOKIE as well" >&2
+    exit 1
+  fi
+  (umask 077 && printf '%s' "$HOWDY_COOKIE" > "$HOME/.erlang.cookie")
+  case "${HOWDY_NODE_NAME#*@}" in
+    *:*) NAME_FLAGS="-name $HOWDY_NODE_NAME -proto_dist inet6_tcp" ;;
+    *.*) NAME_FLAGS="-name $HOWDY_NODE_NAME" ;;
+    *) NAME_FLAGS="-sname $HOWDY_NODE_NAME" ;;
+  esac
+}
+
+case "$COMMAND" in
+  run)
+    NAME_FLAGS=""
+    distribution
+    PORT_FLAGS=""
+    if [ -n "${HOWDY_NODE_NAME:-}" ] && [ -n "${HOWDY_DIST_PORT:-}" ]; then
+      PORT_FLAGS="-kernel inet_dist_listen_min $HOWDY_DIST_PORT inet_dist_listen_max $HOWDY_DIST_PORT"
+    fi
+    # shellcheck disable=SC2086 # the flags are words to split
+    exec erl -pa "$BASE"/*/ebin $NAME_FLAGS $PORT_FLAGS \
+      -eval "$PACKAGE@@main:run($PACKAGE)" -noshell
+    ;;
+{{- if .Database}}
+  migrate)
+    exec erl -pa "$BASE"/*/ebin \
+      -eval "$PACKAGE@@main:run('tasks@migrate')" -noshell
+    ;;
+{{- end}}
+  remote)
+    if [ -z "${HOWDY_NODE_NAME:-}" ]; then
+      echo "bin/start: remote needs HOWDY_NODE_NAME and HOWDY_COOKIE, as the app was started with" >&2
+      exit 1
+    fi
+    TARGET=$HOWDY_NODE_NAME
+    case "$TARGET" in
+      *@*) HOWDY_NODE_NAME="remote_$$@${TARGET#*@}" ;;
+      *) HOWDY_NODE_NAME="remote_$$" ;;
+    esac
+    NAME_FLAGS=""
+    distribution
+    # shellcheck disable=SC2086
+    exec erl -pa "$BASE"/*/ebin $NAME_FLAGS -hidden -remsh "$TARGET"
+    ;;
+  *)
+    echo "usage: bin/start [run{{if .Database}}|migrate{{end}}|remote]" >&2
+    exit 1
+    ;;
+esac

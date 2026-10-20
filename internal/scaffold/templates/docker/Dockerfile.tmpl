@@ -1,0 +1,68 @@
+# An image that runs {{.Name}}, built from the project with Gleam and
+# started by bin/start:
+#
+#   docker build -t {{.Name}} .
+{{- if eq .Database "sqlite"}}
+#   docker run --rm -p 8787:8787 -v {{.Name}}_data:/data {{.Name}}
+#
+# The SQLite database is kept in the /data volume. One container at a time
+# can use it, so run a single replica.
+{{- else if eq .Database "postgres"}}
+#   docker run --rm -p 8787:8787 -e DATABASE_URL=postgres://... {{.Name}}
+{{- else}}
+#   docker run --rm -p 8787:8787 {{.Name}}
+{{- end}}
+#
+# GET /up answers 200 once the app is serving{{if .Database}}, after it has migrated{{end}}. The
+# Gleam and Erlang versions are the ones the project was made with; change
+# them here when you upgrade.
+
+ARG GLEAM_VERSION=v{{.Gleam}}
+ARG ERLANG_VERSION={{.Erlang}}
+
+FROM ghcr.io/gleam-lang/gleam:${GLEAM_VERSION}-scratch AS gleam
+
+FROM erlang:${ERLANG_VERSION}-alpine AS build
+COPY --from=gleam /bin/gleam /bin/gleam
+{{- if eq .Source "git"}}
+{{- if .Database}}
+# Git fetches the Howdy packages; a C toolchain builds the native database
+# driver Gloo brings.
+RUN apk add --no-cache git build-base
+{{- else}}
+# Git fetches the Howdy packages.
+RUN apk add --no-cache git
+{{- end}}
+{{- else if .Database}}
+# A C toolchain builds the native database driver Gloo brings.
+RUN apk add --no-cache build-base
+{{- end}}
+WORKDIR /build
+# Download the dependencies before copying the code, so a change to the
+# code reuses this layer.
+COPY gleam.toml manifest.toml ./
+RUN gleam deps download
+COPY . .
+RUN gleam export erlang-shipment
+
+# The same Erlang image, so the compiled code and native drivers match it.
+FROM erlang:${ERLANG_VERSION}-alpine
+{{- if eq .Database "sqlite"}}
+RUN adduser -D -h /app app && mkdir /data && chown app /data
+{{- else}}
+RUN adduser -D -h /app app
+{{- end}}
+WORKDIR /app
+COPY --from=build --chown=app /build/build/erlang-shipment /app
+COPY --chown=app bin/start /app/bin/start
+USER app
+ENV HOST=0.0.0.0 PORT=8787
+{{- if eq .Database "sqlite"}}
+ENV DATABASE_PATH=/data/{{.Name}}.sqlite3
+VOLUME /data
+{{- end}}
+EXPOSE 8787
+HEALTHCHECK --interval=10s --timeout=3s --start-period=30s \
+  CMD wget -qO /dev/null http://127.0.0.1:8787/up || exit 1
+ENTRYPOINT ["/app/bin/start"]
+CMD ["run"]

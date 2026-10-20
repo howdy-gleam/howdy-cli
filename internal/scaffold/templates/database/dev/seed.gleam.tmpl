@@ -1,0 +1,37 @@
+//// `howdy db seed`: migrates the development database and fills it with
+//// example records, built by the factories in `dev/{{.Name}}/factories/`.
+//// `howdy db seed --reset` empties it first. Both use `.env` and
+//// `{{if eq .Database "postgres"}}DATABASE_URL{{else}}DATABASE_PATH{{end}}` like the app. Code in `dev/` is never part of
+//// `gleam run` or a deployment.
+
+{{if not .Todos}}import gleam/io
+{{end}}import gloo/repo.{type Repo}
+import {{.Name}}
+{{- if .Todos}}
+import {{.Name}}/factories/todo_factory
+import {{.Name}}/features/todos/todo_item.{TodoInput}
+{{- end}}
+import {{.Name}}/platform/database
+
+pub fn main() -> Nil {
+  {{.Name}}.load_environment()
+  let db = {{.Name}}.database()
+  let assert Ok(_) = database.migrate(db)
+  seed(db)
+}
+
+/// The records to start with. Running it again adds them again, so use
+/// `howdy db seed --reset` to start over.
+pub fn seed(db: Repo) -> Nil {
+{{- if .Todos}}
+  todo_factory.insert(db, TodoInput(title: "Try the todo list"))
+  todo_factory.insert_many(db, 3, fn(input) { input })
+  Nil
+{{- else}}
+  // Insert records with the factories `howdy create repo` writes, such as
+  // `user_factory.insert_many(db, 10, fn(input) { input })`, in place of
+  // these two lines.
+  let _ = db
+  io.println("Nothing to seed yet: add records to dev/seed.gleam.")
+{{- end}}
+}

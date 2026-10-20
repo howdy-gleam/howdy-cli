@@ -5,6 +5,8 @@ import gleam/result
 import gloo/error
 import gloo/repo.{type Repo}
 import gloo/runner
+import howdy/database as howdy_database
+import howdy/service
 import {{.Name}}/migrations/create_todos
 
 /// Settings every connection needs, in development, tests and production.
@@ -19,8 +21,14 @@ pub fn configure(db: Repo) -> Result(Int, String) {
 
 /// Apply every migration that has not run yet. Add new migrations to the
 /// list with a higher version; never edit one that has been applied.
+///
+/// The migrations run in one transaction that holds the migration lock, so
+/// copies of the app that start at the same time take turns: the first
+/// applies them and the others wait, then find nothing left to do. If one
+/// fails, none of them is applied.
 pub fn migrate(db: Repo) -> Result(Int, String) {
   use _ <- result.try(configure(db))
+  use db <- one_at_a_time(db)
   runner.run(db, [create_todos.migration()], runner.Up, option.None)
   |> result.map_error(fn(e) {
     case e {
@@ -28,4 +36,18 @@ pub fn migrate(db: Repo) -> Result(Int, String) {
       runner.MigrationFailed(_, _, message) -> message
     }
   })
+}
+
+/// Run `migrate` in one transaction, holding the lock Howdy's own
+/// migrations take. On SQLite that is the database's write lock: one
+/// connection writes at a time.
+fn one_at_a_time(
+  db: Repo,
+  migrate: fn(Repo) -> Result(Int, String),
+) -> Result(Int, String) {
+  howdy_database.transaction(db, fn(conn) {
+    use _ <- result.try(howdy_database.lock_migrations(conn))
+    migrate(conn) |> result.map_error(service.Internal)
+  })
+  |> result.map_error(service.message)
 }

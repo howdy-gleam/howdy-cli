@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"howdy/internal/scaffold"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,9 +17,9 @@ import (
 // app's services, managed in the dev admin and with `gleam run -m
 // tasks/flags`.
 type Flags struct {
-	Project  *Project
-	Git, Ref string
-	Admin    bool
+	Project *Project
+	scaffold.Source
+	Admin bool
 }
 
 // NewFlags checks that the project can take flags and does not have them
@@ -34,15 +35,15 @@ func NewFlags(p *Project) (*Flags, error) {
 	case !dependency("howdy_database").Match(toml):
 		return nil, errors.New("feature flags keep their settings in the app's database through howdy_database, which this project does not have; create a project with a database ('howdy new' without --no-database) to use them")
 	}
-	m := howdyDependency.FindSubmatch(toml)
-	if m == nil {
-		return nil, errors.New("gleam.toml does not take howdy from Git as 'howdy new' writes it (howdy = { git = \"...\", ref = \"...\" }), so the matching howdy_flags is unknown; add howdy_flags by hand")
+	source, err := howdySource(toml, "howdy_flags")
+	if err != nil {
+		return nil, err
 	}
 	root := readText(filepath.Join(p.Dir, "src", p.Name+".gleam"))
 	if !servicesType.MatchString(root) || !servicesMade.MatchString(root) {
 		return nil, fmt.Errorf("src/%s.gleam was made before 'howdy new' built the app from a services record, which the flags are added to; see the flags docs to add them by hand", p.Name)
 	}
-	f := &Flags{Project: p, Git: string(m[1]), Ref: string(m[2])}
+	f := &Flags{Project: p, Source: source}
 	f.Admin = bytes.Contains([]byte(readText(filepath.Join(p.Dir, p.devFile()))), []byte("admin.mount("))
 	return f, nil
 }
@@ -94,7 +95,7 @@ func (f *Flags) Write() ([]string, error) {
 			return nil, fmt.Errorf("%s already exists; nothing was written", file.Path)
 		}
 	}
-	line := fmt.Sprintf("howdy_flags = { git = %q, ref = %q, path = \"flags\" }\n", f.Git, f.Ref)
+	line := f.Dependency("howdy_flags") + "\n" + otpDependency(p.Dir)
 	if err := insertDependencies(filepath.Join(p.Dir, "gleam.toml"), line); err != nil {
 		return nil, err
 	}
@@ -120,13 +121,23 @@ func (f *Flags) Register() (notes []string) {
 		if err != nil {
 			return "", err
 		}
-		if text, err = start(text); err != nil {
+		if !supervised(text) {
+			if text, err = start(text); err != nil {
+				return "", err
+			}
+			return addImports(text, "import howdy/flags", module), nil
+		}
+		keeper := "let #(features, flag_keeper) = feature_flags.supervised(db)"
+		if text, err = addToServices(text, "features", "", keeper); err != nil {
+			return "", err
+		}
+		if text, err = addChild(text, "Keeps the feature flags current: see feature_flags.gleam.", "flag_keeper"); err != nil {
 			return "", err
 		}
 		return addImports(text, "import howdy/flags", module), nil
 	})
 	if err != nil {
-		notes = append(notes, fmt.Sprintf("Add the flags to the app in %s: features: flags.Flags in Services, built in main with feature_flags.start(db) after migrating (import howdy/flags and %s/feature_flags).", root, p.Name))
+		notes = append(notes, fmt.Sprintf("Add the flags to the app in %s: features: flags.Flags in Services, and in main after migrating, let #(features, flag_keeper) = feature_flags.supervised(db), pass features to Services and add flag_keeper to the supervision tree before the server (import howdy/flags and %s/feature_flags).", root, p.Name))
 	}
 
 	database := filepath.Join("src", p.Name, "platform", "database.gleam")

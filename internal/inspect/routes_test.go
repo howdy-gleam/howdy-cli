@@ -46,6 +46,7 @@ func TestRoutesOfNewProject(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []string{
+		"GET /up howdy.health_check",
 		"GET /api/todos todos.controller",
 		"GET /api/todos/:id todos.controller",
 		"POST /api/todos todos.controller",
@@ -69,7 +70,7 @@ func TestRoutesOfNewProject(t *testing.T) {
 		if r.Line < 1 || r.Line > len(lines) {
 			t.Fatalf("%s:%d is past the end of the file", r.File, r.Line)
 		}
-		if r.Method != "*" && !strings.Contains(lines[r.Line-1], "."+strings.ToLower(r.Method)+"(") {
+		if r.Method != "*" && r.Mount == "" && !strings.Contains(lines[r.Line-1], "."+strings.ToLower(r.Method)+"(") {
 			t.Errorf("%s:%d should declare %s %s: %q", r.File, r.Line, r.Method, r.Path, lines[r.Line-1])
 		}
 	}
@@ -83,7 +84,7 @@ func TestRoutesOfAPIProject(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := strings.Join(summary(routes), "\n"); got != "GET /health health.controller" {
+	if got := strings.Join(summary(routes), "\n"); got != "GET /up howdy.health_check" {
 		t.Errorf("routes:\n%s", got)
 	}
 }
@@ -160,5 +161,38 @@ func TestJoin(t *testing.T) {
 		if got := join(c[0], c[1]); got != c[2] {
 			t.Errorf("join(%q, %q) = %q, want %q", c[0], c[1], got, c[2])
 		}
+	}
+}
+
+func TestRoutesOfHealthChecks(t *testing.T) {
+	dir := project(t, func(p *scaffold.Project) {
+		p.API, p.Minimal, p.Database = true, true, scaffold.NoDatabase
+	})
+	src := `import howdy
+import howdy/health
+
+pub fn app(services: Services) -> howdy.App {
+  howdy.new()
+  |> howdy.health_check(health.new())
+  |> howdy.health_check(
+    health.new()
+    |> health.at("/ready")
+    |> health.check("database", database.health_check(services.db)),
+  )
+}
+`
+	if err := os.WriteFile(filepath.Join(dir, "src", "demo_site.gleam"), []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	routes, err := Routes(dir, "demo_site")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "GET /up howdy.health_check\nGET /ready howdy.health_check"
+	if got := strings.Join(summary(routes), "\n"); got != want {
+		t.Errorf("routes:\n%s\nwant:\n%s", got, want)
+	}
+	if routes[1].Line != 7 || routes[1].Mount != "the health check" {
+		t.Errorf("/ready = %+v", routes[1])
 	}
 }

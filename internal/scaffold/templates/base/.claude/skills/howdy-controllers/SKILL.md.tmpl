@@ -76,9 +76,16 @@ pub fn validate(input: NoteInput) -> validate.Result(NewNote) {
 
 Rules: `trim` (first, it normalises), `not_empty`, `min_length`,
 `max_length`, `email`, `min`, `max`, `one_of(allowed, show)`,
-`custom(check, message)`. Every field is checked and all errors are
-returned together; a JSON client gets 422
-`{"error":"validation failed","fields":[{"field":...,"message":...}]}`.
+`custom(check, problem)`. A rule fails with a `howdy/problem` `Problem`, not
+a sentence; a rule of your own gives a `Custom` one, with a code for clients
+and the English message:
+`validate.custom(fn(name) { !string.contains(name, " ") }, problem.Custom("spaces", "must not contain spaces"))`.
+Every field is checked and all errors are returned together, as
+`service.FieldError(field, problem)`; a JSON client gets 422
+`{"error":"validation failed","code":...,"fields":[{"field":...,"code":...,"message":...}]}`.
+To show a problem on a page, put it into words:
+`problem.message(found, problem.english())`. In tests, compare problems:
+`FieldError("age", problem.TooSmall(13))`.
 
 ## Responding
 
@@ -102,8 +109,12 @@ service.error_response(ctx, service.NotFound("no such note"))
 | `Validation(List(FieldError))` | 422 |
 | `TooManyRequests(retry_after_seconds:)` | 429 |
 | `Internal(msg)` | 500; logged, the client sees only "internal server error" |
+| `Coded(code, error)` | the inner error's; `code` is sent to the client |
 
-Error bodies are always `{"error": "..."}`. Other responses:
+Error bodies are always `{"error": "...", "code": "..."}`: the `Coded`
+error's own code, or one for the kind, such as `not_found`. Howdy's own
+packages (Howdy Auth) return coded errors, so match on the kind inside with
+`result.map_error(service.uncoded)` before a `case`. Other responses:
 `controller.json(ctx, json)`, `controller.text`, `controller.html`,
 `controller.status(ctx, 204)`, and `|> controller.with_status(422)` on any
 response. There is no redirect helper in core:

@@ -1,0 +1,14 @@
+import gleam/dynamic/decode
+import howdy/testing
+import {{.Name}}/support
+
+pub fn up_answers_while_the_app_runs_test() {
+{{- if .Database}}
+  use db <- support.with_db()
+  let res = testing.get("/up") |> testing.send(support.app(db))
+{{- else}}
+  let res = testing.get("/up") |> testing.send(support.app())
+{{- end}}
+  assert res.status == 200
+  assert testing.json(res, decode.at(["status"], decode.string)) == Ok("ok")
+}

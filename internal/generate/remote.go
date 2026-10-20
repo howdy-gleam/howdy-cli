@@ -3,6 +3,7 @@ package generate
 import (
 	"errors"
 	"fmt"
+	"howdy/internal/scaffold"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -14,8 +15,8 @@ import (
 // procedure to the cluster from main and the dev server, and over HTTP at
 // /rpc for callers with the token in its services.
 type Remote struct {
-	Project  *Project
-	Git, Ref string
+	Project *Project
+	scaffold.Source
 }
 
 // testToken is the RPC token the test support gives the app.
@@ -31,15 +32,15 @@ func NewRemote(p *Project) (*Remote, error) {
 	if dependency("howdy_remote").Match(toml) {
 		return nil, errors.New("this project already has remote calls: howdy_remote is in gleam.toml")
 	}
-	m := howdyDependency.FindSubmatch(toml)
-	if m == nil {
-		return nil, errors.New("gleam.toml does not take howdy from Git as 'howdy new' writes it (howdy = { git = \"...\", ref = \"...\" }), so the matching howdy_remote is unknown; add howdy_remote by hand")
+	source, err := howdySource(toml, "howdy_remote")
+	if err != nil {
+		return nil, err
 	}
 	root := readText(filepath.Join(p.Dir, "src", p.Name+".gleam"))
 	if !servicesType.MatchString(root) || !servicesMade.MatchString(root) {
 		return nil, fmt.Errorf("src/%s.gleam was made before 'howdy new' built the app from a services record, which the RPC token is added to; see the remote docs to add it by hand", p.Name)
 	}
-	return &Remote{Project: p, Git: string(m[1]), Ref: string(m[2])}, nil
+	return &Remote{Project: p, Source: source}, nil
 }
 
 // ProceduresFile is the module that defines the procedures.
@@ -93,7 +94,7 @@ func (r *Remote) Write() ([]string, error) {
 			return nil, fmt.Errorf("%s already exists; nothing was written", f.Path)
 		}
 	}
-	line := fmt.Sprintf("howdy_remote = { git = %q, ref = %q, path = \"remote\" }\n", r.Git, r.Ref)
+	line := r.Dependency("howdy_remote") + "\n" + otpDependency(p.Dir)
 	if err := insertDependencies(filepath.Join(p.Dir, "gleam.toml"), line); err != nil {
 		return nil, err
 	}
@@ -117,7 +118,7 @@ var unusedServices = regexp.MustCompile(`pub fn app\(_services: `)
 
 // Register mounts /rpc in the app with the token from the app's services,
 // and starts the procedure server wherever the services are built for a
-// running app: main and the dev server. The test support gets a fixed
+// running app: in main's supervision tree, and in the dev server. The test support gets a fixed
 // token. For each file without the shape 'howdy new' gives it, the returned
 // notes say what to add by hand.
 func (r *Remote) Register() (notes []string) {
@@ -131,7 +132,14 @@ func (r *Remote) Register() (notes []string) {
 		if err != nil {
 			return "", err
 		}
-		if text, err = addToServices(text, "rpc_token", "rpc.token()", start); err != nil {
+		if supervised(text) {
+			if text, err = addToServices(text, "rpc_token", "rpc.token()"); err != nil {
+				return "", err
+			}
+			if text, err = addChild(text, "Serve the procedures to connected nodes: see platform/rpc.gleam.", "rpc.supervised()"); err != nil {
+				return "", err
+			}
+		} else if text, err = addToServices(text, "rpc_token", "rpc.token()", start); err != nil {
 			return "", err
 		}
 		if !howdyNew.MatchString(text) {
@@ -146,7 +154,7 @@ func (r *Remote) Register() (notes []string) {
 		return addImports(text, rpc), nil
 	})
 	if err != nil {
-		notes = append(notes, fmt.Sprintf("Add remote calls to the app in %s: rpc_token: String in Services, built in main with rpc.token() after calling rpc.start(), and in app |> howdy.controller(rpc.controller(services.rpc_token)) (import %s/platform/rpc).", root, p.Name))
+		notes = append(notes, fmt.Sprintf("Add remote calls to the app in %s: rpc_token: String in Services, built in main with rpc.token(), rpc.supervised() in main's supervision tree before the server (or a call to rpc.start()), and in app |> howdy.controller(rpc.controller(services.rpc_token)) (import %s/platform/rpc).", root, p.Name))
 	}
 
 	dev := p.devFile()

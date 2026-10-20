@@ -1,0 +1,13 @@
+import howdy/jobs
+import {{.Name}}/background_jobs
+import {{.Name}}/support
+
+pub fn a_queued_job_is_done_test() {
+  use db <- support.with_db()
+  let assert Ok(jobs.Inserted(_)) =
+    jobs.new(background_jobs.say_hello(), "Ada") |> jobs.insert(into: db)
+
+  // Do every job that is due, here in the test's own process.
+  let assert Ok(drained) = jobs.drain(background_jobs.runner(db))
+  assert drained.completed == 1
+}

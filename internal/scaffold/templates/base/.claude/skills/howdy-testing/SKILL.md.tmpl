@@ -25,7 +25,7 @@ pub fn lists_notes_test() {
   use db <- support.with_db()            // a fresh, migrated database for this test
   let res = testing.get("/api/notes") |> testing.send(support.app(db))
 {{- else}}
-  let res = testing.get("/health") |> testing.send(support.app())
+  let res = testing.get("/up") |> testing.send(support.app())
 {{- end}}
   assert res.status == 200
   assert response.get_header(res, "content-type")
@@ -69,7 +69,7 @@ Send with `|> testing.send(app)`, then read the response:
 | `testing.text(res)` | the body as a String |
 | `testing.json(res, decoder)` | the decoded JSON body |
 | `testing.error(res)` | the `"error"` message of an error response |
-| `testing.field_errors(res)` | the field errors of a 422 |
+| `testing.field_errors(res)` | the field errors of a 422, each `FieldError(field, problem)`: compare with `[service.FieldError("age", problem.TooSmall(13))]` |
 | `testing.cookies(res)` | cookies set, as `#(name, value)` |
 
 There is no helper for a POST without a body (`testing.request(http.Post, path)`),
@@ -94,6 +94,11 @@ or for HTML: check it with `string.contains(testing.text(res), "...")`.
     assert users.find_by_email(db, "ada@example.com") == Ok(created)
   }
   ```
+
+- Records a test only needs to exist: insert them with the record's factory
+  in `dev/{{.Name}}/factories/`, which validates them the same way:
+  `user_factory.insert(db, UserInput(..user_factory.input(), email: "ada@example.com"))`,
+  or `user_factory.insert_many(db, 3, fn(input) { input })`.
 {{- end}}
 {{- if not .API}}
 - Pages: status 200, `content-type` `text/html; charset=utf-8`, and text

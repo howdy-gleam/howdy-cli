@@ -51,6 +51,49 @@ Howdy OpenAPI serves ` + "`/openapi.json`" + ` and ` + "`/docs`" + `, configured
 ` + "`howdy/openapi/endpoint`" + ` (` + "`endpoint.get`" + `, ` + "`endpoint.post`" + ` and so on, from the
 schemas they read) are documented, so write new JSON routes that way.
 `,
+	"storage": `## File storage
+
+Howdy Storage is installed, as ` + "`files`" + ` in the app's services, made in
+` + "`src/%[1]s/platform/file_storage.gleam`" + `: an S3-compatible bucket when
+` + "`S3_BUCKET`" + ` is set, otherwise a local folder, and memory in the tests. Store
+under a fresh key, ` + "`storage.new_key(prefix: \"avatars\", file_name: upload.file_name)`" + `,
+keep the key in the database, and link to the file with
+` + "`storage.url(services.files, key, expires_in: 3600)`" + `.
+`,
+	"jobs": `## Background jobs
+
+Howdy Jobs is installed. Define jobs in ` + "`src/%[1]s/background_jobs.gleam`" + `
+and handle each in its ` + "`runner`" + `; ` + "`jobs_runner`" + ` in ` + "`src/%[1]s.gleam`" + ` is what
+main and the dev server start. Queue a job in the transaction that needs
+it, ` + "`jobs.new(job, args) |> jobs.insert(into: conn)`" + `, and make doing it twice
+harmless. Tests do due jobs with ` + "`jobs.drain(runner)`" + `; manage them with
+` + "`gleam run -m tasks/jobs help`" + `.
+`,
+	"notifications": `## Notifications
+
+Howdy Notifications is installed, as ` + "`notifier`" + ` in the app's services,
+made in ` + "`src/%[1]s/platform/notifier.gleam`" + `. Send once the change is
+committed: ` + "`notifications.draft(kind, title) |> notifications.send(services.notifier, to: user_id)`" + `.
+Each user's inbox is served at ` + "`/notifications`" + `; ` + "`routes`" + ` there says who the
+user is. Email goes out as background jobs, done by the app's jobs runner.
+`,
+	"i18n": `## Translations
+
+Howdy I18n is installed. Messages live in ` + "`locales/<locale>.json`" + ` (ICU
+MessageFormat); ` + "`src/%[1]s/messages.gleam`" + ` is generated from them, so never
+edit it: run ` + "`gleam run -m howdy/i18n/cli -- gen`" + ` after changing a catalogue
+(` + "`gleam dev`" + ` does it for you). Write text for a request with
+` + "`messages.greeting(locales.translator(ctx), name: ...)`" + `, from
+` + "`src/%[1]s/platform/locales.gleam`" + `, rather than string literals.
+`,
+	"docker": `## Deploying
+
+` + "`Dockerfile`" + ` builds the image to deploy, and ` + "`bin/start`" + ` starts the app in
+it: ` + "`bin/start run`" + `, ` + "`bin/start migrate`" + ` for a database, or ` + "`bin/start remote`" + `
+for a shell inside it. The image's health check asks ` + "`GET /up`" + `. Something the
+app keeps running, such as a pool or a poller, goes in the supervision tree
+` + "`main`" + ` starts, so it stops cleanly with the server.
+`,
 	"remote": `## Remote calls
 
 Howdy Remote is installed. The procedures the app serves are defined in

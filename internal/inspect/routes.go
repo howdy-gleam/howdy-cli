@@ -35,9 +35,10 @@ type Route struct {
 var (
 	importLine = regexp.MustCompile(`(?m)^import ([a-z0-9_/]+)(?:\.\{[^}]*\})?(?: as ([a-z0-9_]+))?`)
 	// A controller registered with the app, |> howdy.controller(<call>),
-	// or the OpenAPI document that 'howdy add openapi' serves with
-	// |> api_docs.serve.
-	registration = regexp.MustCompile(`howdy\.controller\(\s*([a-z0-9_]+)\.([a-z0-9_]+)\(|\|>\s*([a-z0-9_]+)\.serve\b`)
+	// the OpenAPI document that 'howdy add openapi' serves with
+	// |> api_docs.serve, or a health check, |> howdy.health_check(...).
+	registration = regexp.MustCompile(`howdy\.controller\(\s*([a-z0-9_]+)\.([a-z0-9_]+)\(|\|>\s*([a-z0-9_]+)\.serve\b|howdy\.(health_check)\(`)
+	healthPath   = regexp.MustCompile(`\.at\(\s*(?:path:\s*)?"([^"]*)"`)
 	documentPath = regexp.MustCompile(`(?:pub )?const document_path = "([^"]*)"`)
 	prefixCall   = regexp.MustCompile(`controller\.(new|guarded)\(\s*"([^"]*)"`)
 	routeCall    = regexp.MustCompile(`(?:controller|endpoint)\.(?:(get|post|put|patch|delete)\(\s*"([^"]*)"|route\(\s*http\.(\w+),\s*"([^"]*)")`)
@@ -94,11 +95,23 @@ func registered(dir, file, text, fn string, dev bool) []Route {
 		}
 		imports[alias] = m[1]
 	}
-	var routes []Route
+	var routes, health []Route
 	body := text[start:end]
 	for _, loc := range registration.FindAllStringSubmatchIndex(body, -1) {
 		if loc[6] >= 0 {
 			routes = append(routes, apiDocs(dir, file, imports[body[loc[6]:loc[7]]], lineOf(text, start+loc[0]), dev)...)
+			continue
+		}
+		if loc[8] >= 0 {
+			// Answered at /up unless health.at gives another path.
+			path := "/up"
+			if m := healthPath.FindStringSubmatch(arguments(body[loc[1]:])); m != nil {
+				path = m[1]
+			}
+			health = append(health, Route{
+				Method: "GET", Path: path, File: file, Line: lineOf(text, start+loc[0]),
+				Controller: "howdy.health_check", Dev: dev, Mount: "the health check",
+			})
 			continue
 		}
 		alias, call := body[loc[2]:loc[3]], body[loc[4]:loc[5]]
@@ -132,7 +145,8 @@ func registered(dir, file, text, fn string, dev bool) []Route {
 		}
 		routes = append(routes, at)
 	}
-	return routes
+	// Health checks are answered ahead of every route.
+	return append(health, routes...)
 }
 
 // apiDocs lists the document and reference page of Howdy OpenAPI, served

@@ -47,7 +47,7 @@ func TestAddOpenAPI(t *testing.T) {
 		}
 
 		for path, wants := range map[string][]string{
-			"gleam.toml":                                  {`howdy_openapi = { git = "https://github.com/mikeyjones/howdy.git", ref = "v` + scaffold.Release + `", path = "openapi" }`},
+			"gleam.toml":                                  {`howdy_openapi = { git = "https://github.com/howdy-gleam/howdy.git", ref = "v` + scaffold.Release + `", path = "openapi" }`},
 			"src/demo_site/platform/api_docs.gleam":       {`openapi.new(title: "Demo site", version: "0.1.0")`, `openapi.serve(spec(), at: document_path)`},
 			"test/demo_site/platform/api_docs_test.gleam": {"api_docs.document_path", `Ok("Demo site")`},
 		} {

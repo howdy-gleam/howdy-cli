@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"howdy/internal/scaffold"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -18,14 +19,37 @@ import (
 // admin shows the outbox and the previews.
 type Mail struct {
 	Project *Project
-	// Git and Ref are where the project's Howdy packages come from, read
-	// from its howdy dependency so howdy_mail matches them.
-	Git, Ref string
+	// Source is where the project's Howdy packages come from, read from
+	// its howdy dependency so howdy_mail matches them.
+	scaffold.Source
 	// Admin reports whether the dev entry point mounts the admin.
 	Admin bool
 }
 
-var howdyDependency = regexp.MustCompile(`(?m)^howdy\s*=\s*\{\s*git\s*=\s*"([^"]+)",\s*ref\s*=\s*"([^"]+)"\s*\}`)
+var (
+	howdyFromGit = regexp.MustCompile(`(?m)^howdy\s*=\s*\{\s*git\s*=\s*"([^"]+)",\s*ref\s*=\s*"([^"]+)"\s*\}`)
+	// From Hex, the lower bound of the range is the Howdy release, which is
+	// the version of the core package.
+	howdyFromHex = regexp.MustCompile(`(?m)^howdy\s*=\s*"\s*>=\s*([0-9]+\.[0-9]+\.[0-9]+)[^"]*"`)
+)
+
+// howdySource reads where a project's Howdy packages come from out of its
+// howdy dependency in gleam.toml, so the package pkg added to it matches
+// them.
+func howdySource(toml []byte, pkg string) (scaffold.Source, error) {
+	var source scaffold.Source
+	if m := howdyFromGit.FindSubmatch(toml); m != nil {
+		source = scaffold.Source{Kind: scaffold.Git, Git: string(m[1]), Ref: string(m[2])}
+	} else if m := howdyFromHex.FindSubmatch(toml); m != nil {
+		var err error
+		if source, err = scaffold.ReleaseSource(scaffold.Hex, string(m[1])); err != nil {
+			return scaffold.Source{}, fmt.Errorf("gleam.toml takes howdy %s from Hex, so the matching %s is unknown: %w", m[1], pkg, err)
+		}
+	} else {
+		return scaffold.Source{}, fmt.Errorf("gleam.toml takes howdy neither from Git nor from Hex as 'howdy new' writes it (howdy = { git = \"...\", ref = \"...\" } or howdy = \">= 1.0.0 and < 2.0.0\"), so the matching %s is unknown; add %s by hand", pkg, pkg)
+	}
+	return source, source.Check(pkg)
+}
 
 // NewMail checks that the project can take mail and does not have it yet.
 func NewMail(p *Project) (*Mail, error) {
@@ -36,12 +60,12 @@ func NewMail(p *Project) (*Mail, error) {
 	if dependency("howdy_mail").Match(toml) {
 		return nil, errors.New("this project already has mail: howdy_mail is in gleam.toml")
 	}
-	m := howdyDependency.FindSubmatch(toml)
-	if m == nil {
-		return nil, errors.New("gleam.toml does not take howdy from Git as 'howdy new' writes it (howdy = { git = \"...\", ref = \"...\" }), so the matching howdy_mail is unknown; add howdy_mail by hand")
+	source, err := howdySource(toml, "howdy_mail")
+	if err != nil {
+		return nil, err
 	}
 	dev, _ := os.ReadFile(filepath.Join(p.Dir, p.devFile()))
-	return &Mail{Project: p, Git: string(m[1]), Ref: string(m[2]), Admin: bytes.Contains(dev, []byte("admin.mount("))}, nil
+	return &Mail{Project: p, Source: source, Admin: bytes.Contains(dev, []byte("admin.mount("))}, nil
 }
 
 func (p *Project) devFile() string {
@@ -107,7 +131,7 @@ func (m *Mail) Write() ([]string, error) {
 			return nil, fmt.Errorf("%s already exists; nothing was written", f.Path)
 		}
 	}
-	lines := fmt.Sprintf("howdy_mail = { git = %q, ref = %q, path = \"mail\" }\nsmail = \">= 2.0.1 and < 3.0.0\"\n", m.Git, m.Ref)
+	lines := m.Dependency("howdy_mail") + "\nsmail = \">= 2.0.1 and < 3.0.0\"\n"
 	if err := insertDependencies(filepath.Join(p.Dir, "gleam.toml"), lines); err != nil {
 		return nil, err
 	}
@@ -291,7 +315,8 @@ func addServicesField(text, field string) (string, error) {
 }
 
 // addToServices adds a field to the line `let services = Services(...)`,
-// binding it on the lines before, after any extra lines given.
+// binding it to value on the lines before, after any extra lines given. An
+// empty value leaves the binding to those lines.
 func addToServices(text, field, value string, before ...string) (string, error) {
 	loc := servicesMade.FindStringSubmatchIndex(text)
 	if loc == nil {
@@ -309,7 +334,10 @@ func addToServices(text, field, value string, before ...string) (string, error) 
 			lines.WriteString(indent + line + "\n")
 		}
 	}
-	fmt.Fprintf(&lines, "%slet %s = %s\n%slet services = %s(%s)\n", indent, field, value, indent, constructor, args)
+	if value != "" {
+		fmt.Fprintf(&lines, "%slet %s = %s\n", indent, field, value)
+	}
+	fmt.Fprintf(&lines, "%slet services = %s(%s)\n", indent, constructor, args)
 	return text[:loc[0]] + lines.String() + text[loc[1]:], nil
 }
 

@@ -15,11 +15,12 @@ of every request, and a console runs Gleam inside the server.
 ## Requirements
 
 - Gleam 1.18+, Erlang/OTP, and rebar3
-- A C build toolchain, for SQLite's native driver
+- A C build toolchain, for SQLite's native driver{{- if eq .Source "git"}}
 - Git to download Howdy, Howdy UI and the development-only {{if .Full}}hot reload,
   admin and console packages{{else}}hot reload
-  package{{end}} from GitHub at the Howdy {{.Release}} release, tag
+  package{{end}} from {{if .Repository}}`{{.Repository}}`{{else}}GitHub{{end}} at the Howdy {{.Release}} release, tag
   `v{{.Release}}`, as configured in `gleam.toml`.
+{{- end}}
 
 ## Start the dev server
 
@@ -95,9 +96,17 @@ refresh after every command.
 ### Without hot reload
 {{- end}}
 
-`gleam run` starts the server without the reload watcher. It also migrates
-at startup; for production you may prefer to run `gleam run -m tasks/migrate`
-separately and remove that line from `main`.
+`gleam run` starts the server without the reload watcher. It also
+applies pending migrations at startup unless `MIGRATE_ON_START=false`; then
+apply them with `gleam run -m tasks/migrate`.
+
+### Example data
+
+`howdy db seed` migrates the database and runs `dev/seed.gleam`, which
+inserts records through the factories in `dev/{{.Name}}/factories/`, the
+same ones the tests can use. Seeding again adds the records again;
+`howdy db seed --reset` drops every table first, so never run it against
+data you want to keep.
 
 ## Configuration
 
@@ -106,8 +115,10 @@ directory loaded first. Copy `.env.example` to `.env` to change it.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `PORT` | `8787` | Listening port on 127.0.0.1 |
+| `PORT` | `8787` | Listening port |
+| `HOST` | `127.0.0.1` | Address to listen on; `0.0.0.0` in a container |
 | `DATABASE_PATH` | `{{.Name}}.sqlite3` | SQLite file; parent directory must exist |
+| `MIGRATE_ON_START` | `true` | Apply pending migrations as the app starts |
 | `DOT_ENV_PATH` | `.env` | Which file to load, set in the shell |
 {{- if .Full}}
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | unset | `gleam run` sends traces to this OpenTelemetry collector, such as `http://localhost:4318` |
@@ -170,6 +181,10 @@ dev/
 └── {{.Name}}_dev.gleam        # `gleam dev` entry point with hot reload{{if .Full}}, admin and telemetry{{end}}
 priv/public/assets/            # style.css (yours) and ui.css (generated)
 test/
+{{- if .Docker}}
+bin/start                      # starts the app in the image: run{{if .Database}}, migrate{{end}} or remote
+Dockerfile                     # builds the image to deploy
+{{- end}}
 ```
 
 Features live in a folder each under `src/{{.Name}}/features/`, with their
@@ -250,10 +265,97 @@ changing themes or adding copied components:
 gleam run -m tasks/css
 ```
 
+## Deploy
+{{- if .Docker}}
+
+The `Dockerfile` builds an image that runs the app:
+
+```sh
+docker build -t {{.Name}} .
+{{- if eq .Database "sqlite"}}
+docker run --rm -p 8787:8787 -v {{.Name}}_data:/data {{.Name}}
+{{- else if eq .Database "postgres"}}
+docker run --rm -p 8787:8787 -e DATABASE_URL=postgres://user:password@host:5432/{{.Name}} {{.Name}}
+{{- else}}
+docker run --rm -p 8787:8787 {{.Name}}
+{{- end}}
+```
+{{- if eq .Database "postgres"}}
+
+`docker compose --profile app up --build` runs it beside the local
+PostgreSQL, to try it before deploying.
+{{- end}}
+
+The image compiles the app with `gleam export erlang-shipment`, which
+leaves out `dev/` and the dev dependencies, and runs it as an unprivileged
+user on `0.0.0.0:8787`.
+{{- if eq .Database "sqlite"}} The SQLite database is kept in the `/data`
+volume, so it outlives the container. Only one container at a time can use
+it, so run a single replica.
+{{- end}} It uses the Gleam and Erlang versions the project was made
+with; change them at the top of the `Dockerfile` when you upgrade.
+`bin/start` starts the app in the image:
+
+| Command | What it does |
+| --- | --- |
+| `bin/start run` | Serve the app; what the image runs |
+{{- if .Database}}
+| `bin/start migrate` | Apply pending migrations, then exit |
+{{- end}}
+| `bin/start remote` | Open an Erlang shell inside the running app |
+
+Set `HOWDY_NODE_NAME` and `HOWDY_COOKIE` to start the app as a named
+Erlang node, for `bin/start remote` or to join other nodes in a cluster.
+`bin/start` explains them. Distribution is off without them, and nothing
+can attach to the app.
+
+Turning it on opens a door into the app: anyone who can reach the node
+and knows the cookie can run any code in it, using its database and
+reading its secrets with no sign-in. So:
+
+- Make the cookie long and random, such as `openssl rand -hex 32`, and
+  keep it in the platform's secrets, never in the repository or the image.
+- Never publish the distribution ports. Erlang's port mapper listens on
+  4369 and the node on `HOWDY_DIST_PORT`, or on any port without it; keep
+  both on a private network that only the app's own nodes can reach, and
+  never `-p` them from Docker or open them in a firewall.
+- Distribution traffic is not encrypted, so only run it across a network
+  you trust.
+{{- end}}
+
+Whatever runs the app, it is ready for production:
+
+- **Health checks.** `GET /up` answers `{"status":"ok"}` while the app
+  runs{{if .Docker}}, and the image's `HEALTHCHECK` asks it{{end}}. It is answered
+  ahead of the routes and middleware and is not logged, so point a load
+  balancer or platform at it.
+- **Clean stops.** On SIGTERM the server stops taking connections and
+  gives requests in flight 8 seconds to finish, inside the 10 seconds
+  `docker stop` waits. Change it with `howdy.shutdown_timeout` in
+  `configured`.
+{{- if .Database}}
+- **Migrations.** The app applies pending migrations as it starts, and a
+  release that fails to migrate never starts serving. Copies of the app
+  that start together take turns. To migrate as a step of its own before
+  the new version starts, run {{if .Docker}}`bin/start migrate`{{else}}`gleam run -m tasks/migrate`{{end}} and set
+  `MIGRATE_ON_START=false`.
+{{- end}}
+- **Configuration** comes from the environment. Set it on the platform
+  rather than shipping `.env`{{if .Docker}}, which `.dockerignore` leaves out of the image{{end}}.
+
 ## Upgrading Howdy
 
+{{if eq .Source "hex" -}}
+This project uses Howdy {{.Release}}: every Howdy package in `gleam.toml`
+comes from Hex, from its version in that release up to its next major
+version. `gleam update` moves them to the newest versions within those
+ranges, and `manifest.toml` records the ones in use. To move to a new major
+release, raise the ranges of every Howdy package together, run `gleam deps
+download`, and check the release's notes for anything you need to change.
+{{- else -}}
 This project uses Howdy {{.Release}}: every Howdy package in `gleam.toml`
 comes from the release tag `v{{.Release}}`, so they always match. To move
 to a newer release, change `ref = "v{{.Release}}"` to the new tag on every
 one of them, run `gleam deps download`, and check the release's notes for
 anything you need to change.
+{{- end}}

@@ -37,15 +37,16 @@ func TestAddFlags(t *testing.T) {
 		addFlags(t, p)
 		label := c.db.Label()
 		for path, wants := range map[string][]string{
-			"gleam.toml": {`howdy_flags = { git = "https://github.com/mikeyjones/howdy.git", ref = "v` + scaffold.Release + `", path = "flags" }`},
+			"gleam.toml": {`howdy_flags = { git = "https://github.com/howdy-gleam/howdy.git", ref = "v` + scaffold.Release + `", path = "flags" }`},
 			"src/demo_site.gleam": {
 				"Services(db: Repo, features: flags.Flags)",
-				"let features = feature_flags.start(db)\n  let services = Services(db:, features:)",
+				"let #(features, flag_keeper) = feature_flags.supervised(db)\n  let services = Services(db:, features:)",
+				"|> supervisor.add(flag_keeper)\n    |> supervisor.add(howdy.supervised(configured(services)))",
 				"import howdy/flags\n",
 				"import demo_site/feature_flags\n",
 			},
 			"src/demo_site/platform/database.gleam":   {"fn migrate_app(db: Repo)", "use _ <- result.try(feature_flags.migrate(db))"},
-			"src/demo_site/feature_flags.gleam":       {`flags.flag("early_access"`, "flags.register(all())", "flags_database.schema()"},
+			"src/demo_site/feature_flags.gleam":       {`flags.flag("early_access"`, "flags.register(all())", "|> flags.supervised", "flags_database.schema()"},
 			"src/tasks/flags.gleam":                   {"cli.main(feature_flags.all()", "flags_database.store(demo_site.database())"},
 			"dev/demo_site_dev.gleam":                 {"let features = feature_flags.start(db)", "features:)"},
 			"test/demo_site/support.gleam":            {"let features = feature_flags.start(db)"},

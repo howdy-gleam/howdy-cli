@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"howdy/internal/scaffold"
@@ -83,6 +84,7 @@ func TestDryRunWritesNothing(t *testing.T) {
 	wantCreated := map[string]bool{
 		"src/demo_site/features/users/user.gleam":                   true,
 		"src/demo_site/features/users/users.gleam":                  true,
+		"dev/demo_site/factories/user_factory.gleam":                true,
 		"src/demo_site/features/users/users_controller.gleam":       true,
 		"src/demo_site/migrations/create_users.gleam":               true,
 		"test/demo_site/features/users/users_test.gleam":            true,
@@ -150,5 +152,62 @@ func TestJSONReportsChanges(t *testing.T) {
 	}
 	if _, err := os.Stat("src/demo_site/migrations/create_tags.gleam"); err != nil {
 		t.Error("the migration should be written")
+	}
+}
+
+func TestWithPackages(t *testing.T) {
+	with, err := withPackages([]string{"i18n", "Notifications", "storage", "i18n"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, p := range with {
+		names = append(names, p.name)
+	}
+	// Each once, in the order they must be added.
+	if got := strings.Join(names, ","); got != "storage,notifications,i18n" {
+		t.Errorf("with = %s", got)
+	}
+	// Auth goes before notifications, whose inbox asks it who is signed in.
+	with, err = withPackages([]string{"remote", "notifications", "openapi", "auth", "mail", "flags"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	names = names[:0]
+	for _, p := range with {
+		names = append(names, p.name)
+	}
+	if got := strings.Join(names, ","); got != "mail,auth,flags,notifications,openapi,remote" {
+		t.Errorf("with = %s", got)
+	}
+	if _, err := withPackages([]string{"cache"}); err == nil || !strings.Contains(err.Error(), "mail, auth, flags, storage, jobs, notifications, i18n, openapi, remote") {
+		t.Errorf("an unknown package should be refused, got %v", err)
+	}
+}
+
+func TestNewDryRunWithPackages(t *testing.T) {
+	t.Chdir(t.TempDir())
+	opts := &newOptions{database: "sqlite", release: scaffold.Release, source: string(scaffold.DefaultSource), with: []string{"notifications", "i18n", "auth"}}
+	opts.out = output{json: true, dryRun: true}
+	printed, err := capture(t, func() error { return runNew("demo_site", opts) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	var r result
+	if err := json.Unmarshal([]byte(printed), &r); err != nil {
+		t.Fatalf("not JSON: %v\n%s", err, printed)
+	}
+	created := strings.Join(r.Created, "\n") + "\n"
+	for _, want := range []string{
+		"src/demo_site/platform/notifier.gleam", "src/demo_site/background_jobs.gleam",
+		"src/demo_site/platform/email.gleam", "src/demo_site/messages.gleam", "locales/en.json",
+		"src/demo_site.gleam", "src/demo_site/platform/accounts.gleam", ".claude/skills/howdy-auth/SKILL.md",
+	} {
+		if !strings.Contains(created, want+"\n") {
+			t.Errorf("created should list %s:\n%s", want, created)
+		}
+	}
+	if _, err := os.Stat("demo_site"); !os.IsNotExist(err) {
+		t.Error("a dry run should write nothing")
 	}
 }

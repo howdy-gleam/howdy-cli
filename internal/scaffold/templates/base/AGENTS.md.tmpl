@@ -71,6 +71,7 @@ change without writing anything, and `--json` for output you can parse; a
 {{- end}}
 | `howdy create repo <plural> <singular> name:type ...` | a record, database operations and migration, without routes |
 | `howdy create migration <table> name:type ...` | a migration for a new table |
+| `howdy db seed` | runs `dev/seed.gleam` on the development database (`--reset` drops every table first) |
 {{- end}}
 {{- if not .API}}
 | `howdy create page <controller> <page>` | a page, added to the controller (created if needed) |
@@ -108,6 +109,18 @@ Run `howdy <command> --help` for the details of each.
 - `test/{{.Name}}/` mirrors `src/`. `test/{{.Name}}/support.gleam` builds the
   app for tests{{if .Database}}, and `support.with_db` gives each test a fresh database{{end}}.
 - `dev/{{.Name}}_dev.gleam` is the `gleam dev` entry point{{if .Full}}, which also mounts the admin{{end}}.
+{{- if .Docker}}
+- `Dockerfile` builds the image to deploy, and `bin/start` starts the app in
+  it. Something the app keeps running, such as a pool or a poller, goes in
+  the supervision tree `main` starts, so it stops cleanly with the server.
+{{- end}}
+{{- if .Database}}
+- `dev/{{.Name}}/factories/` holds a factory for each record, which
+  `howdy create repo`, `controller`{{if not .API}} and `pages`{{end}} write: `input()` for valid
+  input and `insert(db, input)` to validate and insert it. Tests and
+  `dev/seed.gleam`, the development data `howdy db seed` inserts, use them.
+  Code in `dev/` never ships.
+{{- end}}
 {{- if .Database}}
 - `src/tasks/` holds `gleam run -m tasks/<name>` scripts, such as `tasks/migrate`.
 {{- end}}
@@ -163,6 +176,12 @@ Configuration is read from the environment and `.env` (see `.env.example`).
 
 ## Upgrading Howdy
 
+{{if eq .Source "hex" -}}
+Every Howdy package in `gleam.toml` comes from Hex, as a version range from
+Howdy {{.Release}}, and they must stay on one major release. Do not change
+one range without the others.
+{{- else -}}
 Every Howdy package in `gleam.toml` uses the tag `v{{.Release}}`, and they
-must stay on one release. Do not change one without the others. See
+must stay on one release. Do not change one without the others.
+{{- end}} See
 README.md for the rest of the project's documentation.

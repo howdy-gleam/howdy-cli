@@ -23,8 +23,14 @@ type Project struct {
 	// example todo list, or NoDatabase for a page-only project.
 	Database Database
 	// Release is the Howdy release the project depends on, such as
-	// "2.1.0": its packages come from the tag "v" + Release.
+	// "1.0.0".
 	Release string
+	// Source is where the project downloads the packages of Release from:
+	// the tag "v" + Release of Repository, or Hex.
+	Source SourceKind
+	// Repository is the Git repository a git source takes the packages
+	// from, such as a fork or a private mirror; "" is Repository.
+	Repository string
 	// Minimal leaves out the development admin, telemetry and the GSH
 	// console, which every project gets otherwise.
 	Minimal bool
@@ -35,6 +41,12 @@ type Project struct {
 	// NoAgents leaves out the files for coding agents: AGENTS.md,
 	// CLAUDE.md and the skills in .claude/skills/.
 	NoAgents bool
+	// NoDocker leaves out the Dockerfile, .dockerignore and bin/start.
+	NoDocker bool
+	// Gleam and Erlang are the versions the Dockerfile builds and runs
+	// with, such as "1.19.2" and "29": the developer's own, by default.
+	Gleam  string
+	Erlang string
 
 	arg string
 }
@@ -43,12 +55,19 @@ type Project struct {
 // against, and so the one new projects depend on unless told otherwise.
 // Update it with the templates when a Howdy release changes what a project
 // needs.
-const Release = "2.1.2"
+const Release = "1.0.0"
+
+// Gleam and Erlang are the versions a Dockerfile uses when the developer's
+// own cannot be found: the ones these templates are tested with.
+const (
+	Gleam  = "1.19.2"
+	Erlang = "29"
+)
 
 var releasePattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+$`)
 
 // ParseRelease reads the value of the --howdy flag: a release such as
-// 2.1.0, with or without a leading v.
+// 1.0.0, with or without a leading v.
 func ParseRelease(s string) (string, error) {
 	release := strings.TrimPrefix(strings.TrimSpace(s), "v")
 	if !releasePattern.MatchString(release) {
@@ -101,7 +120,8 @@ var reserved = map[string]bool{
 	"gleam": true, "erlang": true, "src": true, "dev": true, "priv": true,
 	"howdy": true, "howdy_ui": true, "howdy_dev": true, "howdy_database": true,
 	"howdy_admin": true, "howdy_telemetry": true, "howdy_auth": true,
-	"howdy_mail": true, "gsh": true, "console": true, "lustre": true,
+	"howdy_mail": true, "howdy_storage": true, "howdy_jobs": true,
+	"howdy_notifications": true, "howdy_i18n": true, "gsh": true, "console": true, "lustre": true,
 	"sketch": true, "ewe": true, "logging": true, "dot_env": true,
 	"gleeunit": true, "gloo": true, "tasks": true, "home": true, "todos": true,
 	"support": true, "pog": true,
@@ -133,8 +153,11 @@ func New(arg string) (*Project, error) {
 		Name:     name,
 		Title:    title(name),
 		Dir:      dir,
-		Database: SQLite,
+		Database: Postgres,
 		Release:  Release,
+		Source:   DefaultSource,
+		Gleam:    Gleam,
+		Erlang:   Erlang,
 		arg:      arg,
 	}, nil
 }
@@ -197,7 +220,7 @@ func (p *Project) Write(each func(path string)) (int, error) {
 		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 			return 0, err
 		}
-		if err := os.WriteFile(target, f.Content, 0o644); err != nil {
+		if err := os.WriteFile(target, f.Content, f.Mode()); err != nil {
 			return 0, err
 		}
 		if each != nil {
@@ -205,6 +228,31 @@ func (p *Project) Write(each func(path string)) (int, error) {
 		}
 	}
 	return len(files), nil
+}
+
+// WriteDocker writes the files 'howdy new' adds for containers into an
+// existing project, leaving any that are already there alone. It returns
+// the paths written and the paths kept.
+func (p *Project) WriteDocker() (written, kept []string, err error) {
+	files, err := p.DockerFiles()
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, f := range files {
+		target := filepath.Join(p.Dir, filepath.FromSlash(f.Path))
+		if _, err := os.Stat(target); err == nil {
+			kept = append(kept, f.Path)
+			continue
+		}
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			return written, kept, err
+		}
+		if err := os.WriteFile(target, f.Content, f.Mode()); err != nil {
+			return written, kept, err
+		}
+		written = append(written, f.Path)
+	}
+	return written, kept, nil
 }
 
 // Remove deletes the project directory. Used to clean up after a failure.

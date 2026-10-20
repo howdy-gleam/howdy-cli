@@ -35,9 +35,14 @@ pub fn controller(db: Repo, identity: Auth) {
 and it is registered with `howdy.controller(notes_controller.controller(db, services.identity))`.
 
 - `ctx.guard` is a `Principal(user:, session_id:, client:)`, and
-  `ctx.guard.user` a `User(id:, email:, group_id:, created_at:, updated_at:)`.
-  The id is a String. Keep anything else about a person (a name, a
-  profile) in your own table, keyed by that id.
+  `ctx.guard.user` a `User(id:, email:, group_id:, created_at:, updated_at:, locale:)`,
+  where `locale` is the language the user's pages and emails use, an
+  `Option(String)`. The id is a String. Keep anything else about a person
+  (a name, a profile) in your own table, keyed by that id.
+- Auth's functions fail with coded errors, such as
+  `service.Coded("password_common", service.Invalid(...))`, whose code a
+  client can translate. To match the kind, unwrap it first:
+  `|> result.map_error(service.uncoded)`.
 - A request needs either `Authorization: Bearer <token>` or the session
   cookie; with neither it gets 401. With the cookie, a POST, PUT, PATCH or
   DELETE also needs an `Origin` header matching `APP_ORIGIN`, or it gets 403.

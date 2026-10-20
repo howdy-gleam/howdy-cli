@@ -18,6 +18,8 @@ func project(t *testing.T, database scaffold.Database) *Project {
 		t.Fatal(err)
 	}
 	s.Database = database
+	// These tests check the Git dependency lines; see TestAddToHexProject.
+	s.Source = scaffold.Git
 	if _, err := s.Write(nil); err != nil {
 		t.Fatal(err)
 	}
@@ -127,7 +129,7 @@ func TestWriteAndRegister(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(written) != 6 {
+	if len(written) != 7 {
 		t.Errorf("wrote %v", written)
 	}
 	if notes := c.Register(); len(notes) != 0 {
@@ -200,7 +202,8 @@ func TestRepoHasNoController(t *testing.T) {
 	}
 	want := []string{
 		"src/demo_site/features/users/user.gleam", "src/demo_site/features/users/users.gleam",
-		"src/demo_site/migrations/create_users.gleam", "test/demo_site/features/users/users_test.gleam",
+		"dev/demo_site/factories/user_factory.gleam", "src/demo_site/migrations/create_users.gleam",
+		"test/demo_site/features/users/users_test.gleam",
 	}
 	if strings.Join(written, " ") != strings.Join(want, " ") {
 		t.Errorf("wrote %v, want %v", written, want)
@@ -219,6 +222,62 @@ func TestRepoHasNoController(t *testing.T) {
 	}
 }
 
+func TestFactory(t *testing.T) {
+	p := project(t, scaffold.SQLite)
+	c, err := NewSlice(p, "users", "user", []string{"name", "age:int", "score:float", "admin:bool"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Write(); err != nil {
+		t.Fatal(err)
+	}
+	factory := read(t, p, "dev/demo_site/factories/user_factory.gleam")
+	for _, want := range []string{
+		"import demo_site/features/users/user.{type User, type UserInput}",
+		`user.UserInput(name: "Name " <> n, age: 1, score: 1.5, admin: False)`,
+		"let assert Ok(valid) = user.validate(input)",
+		"let assert Ok(item) = users.create(db, valid)",
+		"pub fn insert_many(db: Repo, count: Int, with: fn(UserInput) -> UserInput) -> List(User)",
+		"unique_integer([Positive, Monotonic])",
+	} {
+		if !strings.Contains(factory, want) {
+			t.Errorf("the factory should contain %q:\n%s", want, factory)
+		}
+	}
+
+	// Without a string to number, the factory needs no sequence, which
+	// would otherwise be an unused function.
+	c, err = NewSlice(p, "counters", "counter", []string{"hits:int", "enabled:bool"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Write(); err != nil {
+		t.Fatal(err)
+	}
+	factory = read(t, p, "dev/demo_site/factories/counter_factory.gleam")
+	if !strings.Contains(factory, "counter.CounterInput(hits: 1, enabled: False)") {
+		t.Errorf("unexpected input:\n%s", factory)
+	}
+	if strings.Contains(factory, "sequence") || strings.Contains(factory, "gleam/int") {
+		t.Errorf("a factory without strings should not number them:\n%s", factory)
+	}
+
+	// A migration on its own has no record to build.
+	m, err := NewMigration(p, "events", []string{"name:string"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	written, err := m.Write()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range written {
+		if strings.HasPrefix(path, "dev/") {
+			t.Errorf("a migration should not write %s", path)
+		}
+	}
+}
+
 func TestPages(t *testing.T) {
 	p := project(t, scaffold.SQLite)
 	c, err := NewSlice(p, "blog_posts", "blog_post", []string{"title", "views:int", "rating:float", "published:bool"})
@@ -230,7 +289,7 @@ func TestPages(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(written) != 13 {
+	if len(written) != 14 {
 		t.Errorf("wrote %v", written)
 	}
 	if notes := c.Register(); len(notes) != 0 {
@@ -284,7 +343,7 @@ func TestPages(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(written) != 11 {
+	if len(written) != 12 {
 		t.Errorf("wrote %v", written)
 	}
 	if got, _ := os.ReadFile(shared); string(got) != "// mine\n" {

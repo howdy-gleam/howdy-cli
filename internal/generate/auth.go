@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"howdy/internal/scaffold"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -17,9 +18,9 @@ import (
 type Auth struct {
 	Project *Project
 	// Mail is set when the project needs mail first.
-	Mail     *Mail
-	Git, Ref string
-	Admin    bool
+	Mail *Mail
+	scaffold.Source
+	Admin bool
 }
 
 // NewAuth checks that the project can take auth and does not have it yet.
@@ -34,15 +35,15 @@ func NewAuth(p *Project) (*Auth, error) {
 	case !dependency("howdy_database").Match(toml):
 		return nil, errors.New("auth keeps its users and sessions in the app's database through howdy_database, which this project does not have; create a project with a database ('howdy new' without --no-database) to use auth")
 	}
-	m := howdyDependency.FindSubmatch(toml)
-	if m == nil {
-		return nil, errors.New("gleam.toml does not take howdy from Git as 'howdy new' writes it (howdy = { git = \"...\", ref = \"...\" }), so the matching howdy_auth is unknown; add howdy_auth by hand")
+	source, err := howdySource(toml, "howdy_auth")
+	if err != nil {
+		return nil, err
 	}
 	root := readText(filepath.Join(p.Dir, "src", p.Name+".gleam"))
 	if !servicesType.MatchString(root) || !servicesMade.MatchString(root) {
 		return nil, fmt.Errorf("src/%s.gleam was made before 'howdy new' built the app from a services record, which auth is added to; see the auth docs to add it by hand", p.Name)
 	}
-	a := &Auth{Project: p, Git: string(m[1]), Ref: string(m[2])}
+	a := &Auth{Project: p, Source: source}
 	a.Admin = bytes.Contains([]byte(readText(filepath.Join(p.Dir, p.devFile()))), []byte("admin.mount("))
 	if !dependency("howdy_mail").Match(toml) {
 		if a.Mail, err = NewMail(p); err != nil {
@@ -90,7 +91,7 @@ func (a *Auth) Write() ([]string, error) {
 			return changed, fmt.Errorf("%s already exists; auth was not added", f.Path)
 		}
 	}
-	line := fmt.Sprintf("howdy_auth = { git = %q, ref = %q, path = \"auth\" }\n", a.Git, a.Ref)
+	line := a.Dependency("howdy_auth") + "\n"
 	if err := insertDependencies(filepath.Join(p.Dir, "gleam.toml"), line); err != nil {
 		return changed, err
 	}

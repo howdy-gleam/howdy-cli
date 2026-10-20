@@ -1,0 +1,18 @@
+import gleam/list
+import gleam/option.{None}
+import howdy/storage
+import howdy/storage/memory
+
+// Tests keep files in memory: `support` gives the app `memory.new()` as its
+// storage, and a test can make its own to look inside.
+pub fn a_stored_file_can_be_read_back_test() {
+  let files = memory.new()
+  let key = storage.new_key(prefix: "notes", file_name: "hello.txt")
+  let assert Ok(Nil) =
+    storage.put(files, key, <<"Hello!":utf8>>, content_type: "text/plain")
+
+  assert storage.get(files, key) == Ok(<<"Hello!":utf8>>)
+  let assert Ok(page) =
+    storage.list(files, prefix: "notes/", after: None, limit: 10)
+  assert list.map(page.objects, fn(object) { object.key }) == [key]
+}

@@ -6,6 +6,11 @@ module is named. Variant types come from the component's module, such as
 `List(Attribute(msg))` from `lustre/attribute`, appended after the
 component's own class; `children` is a `List(Element(msg))`.
 
+Every string a component shows itself, such as a close button's label, is
+in one `Words` record from `howdy/ui/words`, so it can be translated.
+Components that show such words take them first: `w` below is
+`words.english()`, or `words.translated(t)` for another language.
+
 ## Text
 
 | Call | Notes |
@@ -55,7 +60,7 @@ A link that looks like a button: `h.a([a.href(url), ui.class(button.button_class
 | `ui.radio_group(attrs, children)` | |
 | `ui.native_select(attrs, children)` | children are `h.option` |
 | `ui.select(id:, name:, value:, placeholder:, attributes:, items:)` | items from `ui.select_item(value, label)`, `ui.select_group(label, items)`; submits through a hidden input named `name` |
-| `ui.combobox(id:, name:, value:, label:, placeholder:, search:, attributes:, options:)` | |
+| `ui.combobox(w, id:, name:, value:, label:, placeholder:, search:, attributes:, options:)` | |
 | `ui.field(attrs, children)` | wraps a label, control, description and error |
 | `ui.field_description(attrs, children)`, `ui.field_error(attrs, children)` | mark the control `a.aria_invalid("true")` and point `a.aria_describedby` at the error |
 | `ui.fieldset(attrs, legend: [...], children: [...])` | |
@@ -78,7 +83,7 @@ A link that looks like a button: `h.a([a.href(url), ui.class(button.button_class
 | `ui.empty(icon:, title:, description:, actions:)` | an empty state |
 | `ui.progress(label:, value:, max:)`, `ui.progress_indeterminate(label:)` | |
 | `ui.spinner(label, attrs)`, `ui.skeleton(attrs)` | |
-| `ui.toast_region(attrs, toasts)`, `ui.toast(toast.Info \| Success \| Danger \| Loading, attrs, children)` | |
+| `ui.toast_region(w, attrs, toasts)`, `ui.toast(toast.Info \| Success \| Danger \| Loading, attrs, children)` | |
 | `ui.avatar(src:, alt:, initials:)` | |
 
 ## Overlays
@@ -90,7 +95,7 @@ The trigger and its target must be in the same page (or the same live view).
 | --- | --- |
 | `ui.dialog(id, attrs, children)`, `ui.alert_dialog(id, attrs, children)` | `ui.dialog_trigger(id)`; close with `ui.dialog_close(id)`; parts `dialog_header(children)`, `dialog_title(id, children)`, `dialog_description(id, children)`, `dialog_footer(children)` |
 | `ui.sheet(id, dialog.Right, attrs, children)` | `ui.dialog_trigger(id)` |
-| `ui.drawer(id, attrs, children)` | `ui.drawer_trigger(id)` |
+| `ui.drawer(w, id, attrs, children)` | `ui.drawer_trigger(id)` |
 | `ui.popover(id, attrs, children)` | `ui.popover_trigger(id)` |
 | `ui.tooltip(id, children)` | `ui.tooltip_trigger(id)` |
 | `ui.menu(id, attrs, children)` | `ui.menu_trigger(id)`; items `menu_item(attrs, children)`, `menu_link(href, attrs, children)`, `menu_label(children)`, `menu_separator()` |
@@ -103,14 +108,16 @@ The trigger and its target must be in the same page (or the same live view).
 | `ui.tabs(id, selected:, attributes:, tabs:)` | tabs from `ui.tab(value, attrs, label:, panel:)` |
 | `ui.accordion(attrs, children)`, `ui.accordion_item(group, open:, summary:, content:)` | |
 | `ui.collapsible(attrs, open:, summary:, content:)` | |
-| `ui.breadcrumb(attrs, items)` | `breadcrumb_link(href, children)`, `breadcrumb_page(children)` |
-| `ui.pagination(current, total, href)` | `href: fn(Int) -> String` |
+| `ui.breadcrumb(w, attrs, items)` | `breadcrumb_link(href, children)`, `breadcrumb_page(children)` |
+| `ui.pagination(w, current:, total:, href:)` | `href: fn(Int) -> String` |
 | `ui.navigation_menu(attrs, items)`, `ui.navigation_link(href, active:, children:)` | |
 
 ## Charts and dates
 
 `howdy/ui/chart` (`bar`, `line`, `area`, `pie`, `donut`, `radial`, `radar`,
-`view`) and `howdy/ui/calendar` are not re-exported: import them.
+`view`) and `howdy/ui/calendar` are not re-exported: import them. Charts and
+`howdy/ui/data_table` speak English unless given a `words` step, and a
+calendar unless given `|> calendar.locale(w.calendar)`.
 
 ## Styles
 

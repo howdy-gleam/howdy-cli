@@ -16,6 +16,8 @@ func scaffolded(t *testing.T, database scaffold.Database, minimal bool) *Project
 		t.Fatal(err)
 	}
 	s.Database, s.Minimal = database, minimal
+	// These tests check the Git dependency lines; see TestAddToHexProject.
+	s.Source = scaffold.Git
 	if _, err := s.Write(nil); err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +66,7 @@ func TestAddMail(t *testing.T) {
 		}
 		for path, wants := range map[string][]string{
 			"gleam.toml": {
-				`howdy_mail = { git = "https://github.com/mikeyjones/howdy.git", ref = "v` + scaffold.Release + `", path = "mail" }` + "\n" +
+				`howdy_mail = { git = "https://github.com/howdy-gleam/howdy.git", ref = "v` + scaffold.Release + `", path = "mail" }` + "\n" +
 					`smail = ">= 2.0.1 and < 3.0.0"` + "\n\n[dev_dependencies]",
 			},
 			"src/demo_site.gleam":                       {c.fields, "let mailer = email.mailer()\n", "import howdy/mail\n", "import demo_site/platform/email\n"},
@@ -120,7 +122,7 @@ func TestAddMailNeedsGitHowdy(t *testing.T) {
 	p := scaffolded(t, scaffold.NoDatabase, true)
 	toml := filepath.Join(p.Dir, "gleam.toml")
 	src, _ := os.ReadFile(toml)
-	os.WriteFile(toml, []byte(strings.Replace(string(src), `howdy = { git = "https://github.com/mikeyjones/howdy.git", ref = "v`+scaffold.Release+`" }`, `howdy = { path = "../howdy" }`, 1)), 0o644)
+	os.WriteFile(toml, []byte(strings.Replace(string(src), `howdy = { git = "https://github.com/howdy-gleam/howdy.git", ref = "v`+scaffold.Release+`" }`, `howdy = { path = "../howdy" }`, 1)), 0o644)
 	if _, err := NewMail(p); err == nil || !strings.Contains(err.Error(), "add howdy_mail by hand") {
 		t.Errorf("got %v", err)
 	}

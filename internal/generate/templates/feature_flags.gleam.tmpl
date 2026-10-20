@@ -1,6 +1,6 @@
 //// Feature flags, with Howdy Flags. Define each flag here and add it to
-//// `all`; `main`, `dev/` and the tests start them as `features` in the
-//// app's services.
+//// `all`; `main` starts them in its supervision tree, and `dev/` and the
+//// tests with `start`, as `features` in the app's services.
 ////
 //// A flag is off until it is turned on, unless it is `on_by_default`, so
 //// it works in tests and on a fresh deployment. Its settings are kept in
@@ -14,6 +14,7 @@
 ////       False -> ...
 ////     }
 
+import gleam/otp/supervision
 import gleam/result
 import gloo/repo.{type Repo}
 import howdy/flags
@@ -43,6 +44,16 @@ pub fn start(db: Repo) -> flags.Flags {
     flags.new(store) |> flags.register(all()) |> flags.start
     as "feature flags could not start"
   features
+}
+
+/// `start` as a child of a supervisor, with the flags it keeps current. The
+/// flags can be handed to the app's services before the child starts.
+pub fn supervised(
+  db: Repo,
+) -> #(flags.Flags, supervision.ChildSpecification(flags.Flags)) {
+  let assert Ok(store) = flags_database.store(db)
+    as "feature flags could not start: has the database been migrated?"
+  flags.new(store) |> flags.register(all()) |> flags.supervised
 }
 
 /// Create the flags' tables, or bring them up to date. They are named

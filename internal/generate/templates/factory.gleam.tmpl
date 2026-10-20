@@ -1,0 +1,59 @@
+//// Builds valid {{.PluralLabel}} for tests and `dev/seed.gleam`:
+////
+////     let item = {{.Singular}}_factory.insert(db, {{.Singular}}_factory.input())
+////     let items = {{.Singular}}_factory.insert_many(db, 3, fn(input) { input })
+////
+//// Change a field with `{{.Type}}Input(..{{.Singular}}_factory.input(), {{(index .Fields 0).Name}}: ...)`.
+//// Everything goes through `{{.Singular}}.validate`, as a request would, so
+//// keep `input` passing the rules added there. Code in `dev/` is never part
+//// of `gleam run` or a deployment.
+{{if .FirstString}}
+import gleam/int
+{{- end}}
+import gloo/repo.{type Repo}
+import {{.Project.FeatureImport .Plural}}/{{.Singular}}.{type {{.Type}}, type {{.Type}}Input}
+import {{.Project.FeatureImport .Plural}}/{{.Plural}}
+
+{{if .FirstString -}}
+/// Input that passes validation, numbered so that no two are the same.
+pub fn input() -> {{.Type}}Input {
+  let n = int.to_string(sequence())
+  {{.Singular}}.{{.Type}}Input({{range $i, $f := .Fields}}{{if $i}}, {{end}}{{$f.Name}}: {{$f.FactoryGleam "n"}}{{end}})
+}
+{{- else -}}
+/// Input that passes validation.
+pub fn input() -> {{.Type}}Input {
+  {{.Singular}}.{{.Type}}Input({{range $i, $f := .Fields}}{{if $i}}, {{end}}{{$f.Name}}: {{$f.FactoryGleam "n"}}{{end}})
+}
+{{- end}}
+
+/// Validates the input and inserts it, crashing if either fails.
+pub fn insert(db: Repo, input: {{.Type}}Input) -> {{.Type}} {
+  let assert Ok(valid) = {{.Singular}}.validate(input)
+  let assert Ok(item) = {{.Plural}}.create(db, valid)
+  item
+}
+
+/// Inserts `count` {{.PluralLabel}}, each made from a fresh `input()` by `with`.
+pub fn insert_many(db: Repo, count: Int, with: fn({{.Type}}Input) -> {{.Type}}Input) -> List({{.Type}}) {
+  case count > 0 {
+    True -> [insert(db, with(input())), ..insert_many(db, count - 1, with)]
+    False -> []
+  }
+}
+{{- if .FirstString}}
+
+// A number above any an earlier call in this run returned.
+fn sequence() -> Int {
+  unique_integer([Positive, Monotonic])
+}
+
+// The constructors are the atoms erlang:unique_integer/1 takes.
+type UniqueOption {
+  Positive
+  Monotonic
+}
+
+@external(erlang, "erlang", "unique_integer")
+fn unique_integer(options: List(UniqueOption)) -> Int
+{{- end}}

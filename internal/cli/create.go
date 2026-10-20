@@ -419,7 +419,7 @@ func runCreatePage(controller, name string, live bool, layout string, addAuth bo
 					r.Warn("gleam was not found on PATH; run 'gleam format' yourself.")
 					return "skipped", nil
 				}
-				return "gleam format", gleam.Run(dir, "format", "src", "test")
+				return "gleam format", gleam.Run(dir, "format", "src", "dev", "test")
 			},
 		},
 	}
@@ -684,7 +684,7 @@ func runCreateSlice(kind, plural, singular string, fields []string, layout strin
 					r.Warn("gleam was not found on PATH; run 'gleam format' yourself.")
 					return "skipped", nil
 				}
-				return "gleam format", gleam.Run(dir, "format", "src", "test")
+				return "gleam format", gleam.Run(dir, "format", "src", "dev", "test")
 			},
 		},
 	}
@@ -701,6 +701,7 @@ func runCreateSlice(kind, plural, singular string, fields []string, layout strin
 		}, notes, manual)
 	}
 	notes = append(notes, fmt.Sprintf("Add validation rules in %s.gleam.", filepath.ToSlash(filepath.Join(project.FeatureDir(plural), singular))))
+	notes = append(notes, fmt.Sprintf("%s builds valid %s for tests and dev/seed.gleam, which 'howdy db seed' runs.", filepath.ToSlash(slice.FactoryPath()), plural))
 	if slice.Auth {
 		notes = append(notes, "Only someone signed in reaches the routes; ctx.guard.user is the signed-in user.")
 	}

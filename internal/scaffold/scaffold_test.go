@@ -48,7 +48,7 @@ func TestWriteRendersProject(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	p.Database = NoDatabase
+	p.Database, p.Source = NoDatabase, Git
 
 	var seen []string
 	n, err := p.Write(func(path string) { seen = append(seen, path) })
@@ -77,9 +77,9 @@ func TestWriteRendersProject(t *testing.T) {
 	toml, _ := os.ReadFile(filepath.Join(p.Dir, "gleam.toml"))
 	for _, line := range []string{
 		`name = "demo_site"`,
-		`howdy = { git = "https://github.com/mikeyjones/howdy.git", ref = "v` + Release + `" }`,
-		`howdy_ui = { git = "https://github.com/mikeyjones/howdy.git", ref = "v` + Release + `", path = "ui" }`,
-		`howdy_dev = { git = "https://github.com/mikeyjones/howdy.git", ref = "v` + Release + `", path = "howdy_dev" }`,
+		`howdy = { git = "https://github.com/howdy-gleam/howdy.git", ref = "v` + Release + `" }`,
+		`howdy_ui = { git = "https://github.com/howdy-gleam/howdy.git", ref = "v` + Release + `", path = "ui" }`,
+		`howdy_dev = { git = "https://github.com/howdy-gleam/howdy.git", ref = "v` + Release + `", path = "howdy_dev" }`,
 	} {
 		if !strings.Contains(string(toml), line) {
 			t.Errorf("gleam.toml missing %q", line)
@@ -98,6 +98,9 @@ func TestWriteRendersProject(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(p.Dir, "src/demo_site/features/todos/todos.gleam")); err == nil {
 		t.Error("page-only project should not contain the todos slice")
 	}
+	if _, err := os.Stat(filepath.Join(p.Dir, "dev/seed.gleam")); err == nil {
+		t.Error("a project without a database has nothing to seed")
+	}
 }
 
 func TestDatabaseOverlay(t *testing.T) {
@@ -105,9 +108,10 @@ func TestDatabaseOverlay(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.Database != SQLite {
-		t.Fatal("database should be SQLite by default")
+	if p.Database != Postgres {
+		t.Fatal("database should be PostgreSQL by default")
 	}
+	p.Database = SQLite
 	files, err := p.Files()
 	if err != nil {
 		t.Fatal(err)
@@ -125,6 +129,7 @@ func TestDatabaseOverlay(t *testing.T) {
 		"src/demo_site/migrations/create_todos.gleam", "src/demo_site/platform/database.gleam",
 		"src/tasks/migrate.gleam", "test/demo_site/support.gleam",
 		"priv/public/assets/ui.css", "src/tasks/css.gleam",
+		"dev/seed.gleam", "dev/seed/reset.gleam", "dev/demo_site/factories/todo_factory.gleam",
 	} {
 		if _, ok := byPath[want]; !ok {
 			t.Errorf("missing %s", want)
@@ -145,9 +150,36 @@ func TestDatabaseOverlay(t *testing.T) {
 	if _, ok := byPath["docker-compose.yml"]; ok {
 		t.Error("a SQLite project should not get a docker-compose.yml")
 	}
+	if !strings.Contains(byPath["dev/seed.gleam"], "todo_factory.insert_many(db, 3,") {
+		t.Error("the seeds should insert todos through their factory")
+	}
+	if !strings.Contains(byPath["dev/seed/reset.gleam"], "FROM sqlite_master") {
+		t.Error("a SQLite reset should drop the tables sqlite_master lists")
+	}
 	for path, content := range byPath {
 		if strings.Contains(strings.ToLower(content), "postgres") {
 			t.Errorf("%s mentions postgres in a SQLite project", path)
+		}
+	}
+}
+
+func TestSeedFiles(t *testing.T) {
+	for _, database := range []Database{SQLite, Postgres} {
+		files, err := SeedFiles("demo_site", database)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(files) != 2 || files[0].Path != "dev/seed.gleam" || files[1].Path != "dev/seed/reset.gleam" {
+			t.Fatalf("files = %v", files)
+		}
+		seed := string(files[0].Content)
+		if strings.Contains(seed, "todo") || !strings.Contains(seed, "Nothing to seed yet") {
+			t.Errorf("seeds for an existing project should not assume the todo list:\n%s", seed)
+		}
+		for _, f := range files {
+			if strings.Contains(string(f.Content), "{{") {
+				t.Errorf("unrendered template markers in %s", f.Path)
+			}
 		}
 	}
 }
@@ -198,6 +230,8 @@ func TestPostgresOverlay(t *testing.T) {
 		"src/demo_site/features/todos/todos.gleam":     "sql.bool(done)",
 		"src/demo_site/features/todos/todo_item.gleam": "decode.field(2, decode.bool)",
 		"src/tasks/migrate.gleam":                      "`DATABASE_URL`",
+		"dev/seed.gleam":                               "`DATABASE_URL`",
+		"dev/seed/reset.gleam":                         "DROP SCHEMA IF EXISTS public CASCADE",
 		"test/demo_site/support.gleam":                 "TEST_DATABASE_URL",
 		// Shared with the SQLite project.
 		"src/demo_site/features/todos/todo_controller.gleam": "controller.new(\"api/todos\")",
@@ -215,12 +249,12 @@ func TestPostgresOverlay(t *testing.T) {
 }
 
 func TestParseRelease(t *testing.T) {
-	for in, want := range map[string]string{"2.1.0": "2.1.0", "v2.1.0": "2.1.0", " 10.0.3 ": "10.0.3"} {
+	for in, want := range map[string]string{"1.0.0": "1.0.0", "v1.0.0": "1.0.0", " 10.0.3 ": "10.0.3"} {
 		if got, err := ParseRelease(in); err != nil || got != want {
 			t.Errorf("ParseRelease(%q) = %q, %v; want %q", in, got, err, want)
 		}
 	}
-	for _, bad := range []string{"", "v2", "2.1", "main", "2.1.0-rc1", "2.1.0\"}"} {
+	for _, bad := range []string{"", "v1", "1.0", "main", "1.0.0-rc1", "1.0.0\"}"} {
 		if _, err := ParseRelease(bad); err == nil {
 			t.Errorf("ParseRelease(%q) should fail", bad)
 		}
@@ -231,7 +265,7 @@ func TestParseRelease(t *testing.T) {
 }
 
 // Every Howdy package in every kind of project comes from the chosen
-// release, and nothing is left on the v2 branch.
+// release, and nothing is left on a branch such as v1 or v2.
 func TestProjectsDependOnOneRelease(t *testing.T) {
 	for _, db := range []Database{NoDatabase, SQLite, Postgres} {
 		p, err := New(filepath.Join(t.TempDir(), "demo_site"))
@@ -239,19 +273,21 @@ func TestProjectsDependOnOneRelease(t *testing.T) {
 			t.Fatal(err)
 		}
 		p.Database = db
-		p.Release = "2.3.1"
+		p.Release, p.Source = "2.3.1", Git
 		files, err := p.Files()
 		if err != nil {
 			t.Fatal(err)
 		}
 		for _, f := range files {
 			content := string(f.Content)
-			if strings.Contains(content, `ref = "v2"`) || strings.Contains(content, "ref `v2`") {
-				t.Errorf("%s (%s) still points at the v2 branch", f.Path, db.Label())
+			for _, branch := range []string{"v1", "v2"} {
+				if strings.Contains(content, `ref = "`+branch+`"`) || strings.Contains(content, "ref `"+branch+"`") {
+					t.Errorf("%s (%s) still points at the %s branch", f.Path, db.Label(), branch)
+				}
 			}
 			if f.Path == "gleam.toml" {
 				refs := strings.Count(content, `ref = "v2.3.1"`)
-				howdy := strings.Count(content, "mikeyjones/howdy.git")
+				howdy := strings.Count(content, "howdy-gleam/howdy.git")
 				if refs == 0 || refs != howdy {
 					t.Errorf("gleam.toml (%s): %d of %d Howdy packages on v2.3.1", db.Label(), refs, howdy)
 				}
@@ -259,6 +295,30 @@ func TestProjectsDependOnOneRelease(t *testing.T) {
 			if f.Path == "README.md" && !strings.Contains(content, "This project uses Howdy 2.3.1") {
 				t.Errorf("README.md (%s) does not say which release it uses", db.Label())
 			}
+		}
+	}
+}
+
+func TestRepositoryReplacesTheHowdyRepository(t *testing.T) {
+	p, err := New(filepath.Join(t.TempDir(), "demo_site"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.Source, p.Repository = Git, "https://git.example.com/me/howdy.git"
+	files, err := p.Files()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range files {
+		content := string(f.Content)
+		if strings.Contains(content, "howdy-gleam/howdy.git") {
+			t.Errorf("%s still takes packages from %s", f.Path, Repository)
+		}
+		if f.Path == "gleam.toml" && !strings.Contains(content, `howdy = { git = "https://git.example.com/me/howdy.git", ref = "v`+Release+`" }`) {
+			t.Errorf("gleam.toml should take howdy from the repository:\n%s", content)
+		}
+		if f.Path == "README.md" && !strings.Contains(content, "from `https://git.example.com/me/howdy.git` at the Howdy") {
+			t.Error("README.md should say where the packages come from")
 		}
 	}
 }
@@ -311,7 +371,7 @@ func TestFullProject(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		p.Database = db
+		p.Database, p.Source = db, Git
 		files, err := p.Files()
 		if err != nil {
 			t.Fatal(err)
@@ -325,8 +385,8 @@ func TestFullProject(t *testing.T) {
 		}
 		for path, wants := range map[string][]string{
 			"gleam.toml": {
-				`howdy_telemetry = { git = "https://github.com/mikeyjones/howdy.git", ref = "v` + Release + `", path = "telemetry" }`,
-				`howdy_admin = { git = "https://github.com/mikeyjones/howdy.git", ref = "v` + Release + `", path = "admin" }`,
+				`howdy_telemetry = { git = "https://github.com/howdy-gleam/howdy.git", ref = "v` + Release + `", path = "telemetry" }`,
+				`howdy_admin = { git = "https://github.com/howdy-gleam/howdy.git", ref = "v` + Release + `", path = "admin" }`,
 				`gsh = ">= 1.3.0 and < 2.0.0"`,
 				`imports = ["console", "gleam/list", "gleam/option", "gleam/result"]`,
 			},
@@ -395,7 +455,7 @@ func TestMinimalProject(t *testing.T) {
 }
 
 // An --api-only project is a JSON backend: no Howdy UI, Lustre, pages,
-// layouts or static files, and a health check in place of the home page.
+// layouts or static files.
 func TestAPIProject(t *testing.T) {
 	for _, minimal := range []bool{false, true} {
 		for _, db := range []Database{NoDatabase, SQLite, Postgres} {
@@ -436,12 +496,12 @@ func TestAPIProject(t *testing.T) {
 				}
 			}
 			for path, wants := range map[string][]string{
-				"gleam.toml":          {`description = "A Howdy API server`, `gleam_json = ">= 3.1.0 and < 4.0.0"`},
-				"src/demo_site.gleam": {"|> howdy.controller(health.controller())", "import demo_site/features/health/health_controller as health", "|> howdy.not_found(fn(ctx) {", `service.NotFound("Not found")`},
-				"src/demo_site/features/health/health_controller.gleam":       {`controller.new("health")`},
-				"test/demo_site/features/health/health_controller_test.gleam": {`get("/health")`},
-				"README.md":               {"howdy new --api-only", "curl http://127.0.0.1:8787/health"},
-				"dev/demo_site_dev.gleam": {"dev.new(fn() {"},
+				"gleam.toml":                             {`description = "A Howdy API server`, `gleam_json = ">= 3.1.0 and < 4.0.0"`},
+				"src/demo_site.gleam":                    {"|> howdy.health_check(health.new())", "|> howdy.not_found(fn(ctx) {", `service.NotFound("Not found")`},
+				"test/demo_site/health_check_test.gleam": {`testing.get("/up")`},
+				"test/demo_site/not_found_test.gleam":    {`testing.get("/no/such/route")`},
+				"README.md":                              {"howdy new --api-only", "curl http://127.0.0.1:8787/up"},
+				"dev/demo_site_dev.gleam":                {"dev.new(fn() {"},
 			} {
 				for _, want := range wants {
 					if !strings.Contains(byPath[path], want) {
@@ -486,7 +546,7 @@ func TestAgentGuide(t *testing.T) {
 					t.Errorf("CLAUDE.md (%s) should import AGENTS.md: %q", label, byPath["CLAUDE.md"])
 				}
 				guide := byPath["AGENTS.md"]
-				for _, want := range []string{"howdy check", "howdy routes", "--dry-run", "src/demo_site.gleam", "v" + Release} {
+				for _, want := range []string{"howdy check", "howdy routes", "--dry-run", "src/demo_site.gleam", "release " + Release} {
 					if !strings.Contains(guide, want) {
 						t.Errorf("AGENTS.md (%s) should mention %q", label, want)
 					}
@@ -574,6 +634,135 @@ func TestNoAgents(t *testing.T) {
 		}
 		if len(files) < 10 {
 			t.Errorf("--no-agents (api %t) should keep the rest of the project: %d files", api, len(files))
+		}
+	}
+}
+
+// Every project is ready to run in production: GET /up for health checks,
+// a server that drains on SIGTERM, and migrations that replicas starting
+// together take turns to apply.
+func TestProjectsAreReadyToDeploy(t *testing.T) {
+	for _, api := range []bool{false, true} {
+		for _, db := range []Database{NoDatabase, SQLite, Postgres} {
+			label := db.Label()
+			if api {
+				label += ", API"
+			}
+			p, err := New(filepath.Join(t.TempDir(), "demo_site"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			p.Database, p.API = db, api
+			files, err := p.Files()
+			if err != nil {
+				t.Fatal(err)
+			}
+			byPath := map[string]string{}
+			for _, f := range files {
+				byPath[f.Path] = string(f.Content)
+			}
+			wants := map[string][]string{
+				"src/demo_site.gleam": {
+					"|> howdy.health_check(health.new())",
+					"|> howdy.shutdown_timeout(8000)",
+					"|> supervisor.add(howdy.supervised(configured(services)))",
+					`|> howdy.start_application(name: "demo_site_server")`,
+				},
+				"gleam.toml":                             {`gleam_otp = ">= 1.2.0 and < 2.0.0"`},
+				"test/demo_site/health_check_test.gleam": {`testing.get("/up")`},
+				"README.md":                              {"## Deploy", "`GET /up`"},
+			}
+			if db != NoDatabase {
+				wants["src/demo_site.gleam"] = append(wants["src/demo_site.gleam"], `env.get_bool_or("MIGRATE_ON_START", True)`)
+				wants["src/demo_site/platform/database.gleam"] = []string{"use db <- one_at_a_time(db)", "howdy_database.lock_migrations(conn)"}
+				wants[".env.example"] = []string{"MIGRATE_ON_START"}
+			}
+			for path, ws := range wants {
+				for _, want := range ws {
+					if !strings.Contains(byPath[path], want) {
+						t.Errorf("%s (%s) should contain %q", path, label, want)
+					}
+				}
+			}
+			if strings.Contains(byPath["src/demo_site.gleam"], "|> howdy.start\n") {
+				t.Errorf("src/demo_site.gleam (%s) still starts the server outside an application", label)
+			}
+		}
+	}
+}
+
+func TestDockerFiles(t *testing.T) {
+	for _, db := range []Database{NoDatabase, SQLite, Postgres} {
+		p, err := New(filepath.Join(t.TempDir(), "demo_site"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		p.Database, p.Gleam, p.Erlang = db, "1.18.1", "28"
+		if _, err := p.Write(nil); err != nil {
+			t.Fatal(err)
+		}
+		read := func(path string) string {
+			src, err := os.ReadFile(filepath.Join(p.Dir, path))
+			if err != nil {
+				t.Errorf("%s (%s): %v", path, db.Label(), err)
+			}
+			return string(src)
+		}
+		dockerfile := read("Dockerfile")
+		for _, want := range []string{
+			"ARG GLEAM_VERSION=v1.18.1", "ARG ERLANG_VERSION=28",
+			"RUN gleam export erlang-shipment", "COPY --chown=app bin/start /app/bin/start",
+			"wget -qO /dev/null http://127.0.0.1:8787/up", `ENTRYPOINT ["/app/bin/start"]`,
+		} {
+			if !strings.Contains(dockerfile, want) {
+				t.Errorf("Dockerfile (%s) should contain %q", db.Label(), want)
+			}
+		}
+		// Gloo brings a native driver, whichever database the project uses.
+		if got := strings.Contains(dockerfile, "build-base"); got != (db != NoDatabase) {
+			t.Errorf("Dockerfile (%s) installs build-base: %v", db.Label(), got)
+		}
+		if got := strings.Contains(dockerfile, "VOLUME /data"); got != (db == SQLite) {
+			t.Errorf("Dockerfile (%s) has a /data volume: %v", db.Label(), got)
+		}
+		start := read("bin/start")
+		if got := strings.Contains(start, "tasks@migrate"); got != (db != NoDatabase) {
+			t.Errorf("bin/start (%s) can migrate: %v", db.Label(), got)
+		}
+		if !strings.Contains(start, "PACKAGE=demo_site") || !strings.HasPrefix(start, "#!/bin/sh\n") {
+			t.Errorf("bin/start (%s) does not start demo_site", db.Label())
+		}
+		if info, err := os.Stat(filepath.Join(p.Dir, "bin/start")); err != nil || info.Mode().Perm() != 0o755 {
+			t.Errorf("bin/start (%s) should be executable", db.Label())
+		}
+		if !strings.Contains(read(".dockerignore"), "\n.env\n") {
+			t.Errorf(".dockerignore (%s) should keep .env out of the image", db.Label())
+		}
+		if db == Postgres && !strings.Contains(read("docker-compose.yml"), "profiles: [app]") {
+			t.Error("docker-compose.yml should offer the app under a profile")
+		}
+	}
+}
+
+func TestNoDocker(t *testing.T) {
+	p, err := New(filepath.Join(t.TempDir(), "demo_site"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.Database, p.NoDocker = Postgres, true
+	files, err := p.Files()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range files {
+		switch f.Path {
+		case "Dockerfile", ".dockerignore", "bin/start":
+			t.Errorf("--no-docker should leave out %s", f.Path)
+		}
+		for _, word := range []string{"bin/start", "Dockerfile", "profiles:"} {
+			if strings.Contains(string(f.Content), word) {
+				t.Errorf("%s mentions %q without the Docker files", f.Path, word)
+			}
 		}
 	}
 }
