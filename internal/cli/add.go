@@ -24,6 +24,10 @@ func addCommand() *cobra.Command {
 	cmd.AddCommand(addRemoteCommand())
 	cmd.AddCommand(addOpenAPICommand())
 	cmd.AddCommand(addFlagsCommand())
+	cmd.AddCommand(addStorageCommand())
+	cmd.AddCommand(addJobsCommand())
+	cmd.AddCommand(addNotificationsCommand())
+	cmd.AddCommand(addI18nCommand())
 	return cmd
 }
 
@@ -97,7 +101,7 @@ func runAddFlags(out *output, skipDeps bool) error {
 				if err != nil {
 					return "", err
 				}
-				return fmt.Sprintf("howdy_flags %s, %d files", f.Ref, len(changed)), nil
+				return fmt.Sprintf("howdy_flags %s, %d files", f.Version("howdy_flags"), len(changed)), nil
 			},
 		},
 		{
@@ -227,7 +231,7 @@ func runAddRemote(out *output, skipDeps bool) error {
 				if err != nil {
 					return "", err
 				}
-				return fmt.Sprintf("howdy_remote %s, %d files", rm.Ref, len(changed)), nil
+				return fmt.Sprintf("howdy_remote %s, %d files", rm.Version("howdy_remote"), len(changed)), nil
 			},
 		},
 		{
@@ -349,7 +353,7 @@ func runAddOpenAPI(out *output, skipDeps bool) error {
 				if err != nil {
 					return "", err
 				}
-				return fmt.Sprintf("howdy_openapi %s, %d files", o.Ref, len(changed)), nil
+				return fmt.Sprintf("howdy_openapi %s, %d files", o.Version("howdy_openapi"), len(changed)), nil
 			},
 		},
 		{
@@ -484,9 +488,9 @@ func runAddAuth(out *output, skipDeps bool) error {
 					return "", err
 				}
 				if a.Mail != nil {
-					return fmt.Sprintf("howdy_auth and howdy_mail %s, %d files", a.Ref, len(changed)), nil
+					return fmt.Sprintf("howdy_auth %s and howdy_mail %s, %d files", a.Version("howdy_auth"), a.Mail.Version("howdy_mail"), len(changed)), nil
 				}
-				return fmt.Sprintf("howdy_auth %s, %d files", a.Ref, len(changed)), nil
+				return fmt.Sprintf("howdy_auth %s, %d files", a.Version("howdy_auth"), len(changed)), nil
 			},
 		},
 		{
@@ -622,7 +626,7 @@ func runAddMail(out *output, skipDeps bool) error {
 				if err != nil {
 					return "", err
 				}
-				return fmt.Sprintf("howdy_mail %s, %d files", m.Ref, len(changed)), nil
+				return fmt.Sprintf("howdy_mail %s, %d files", m.Version("howdy_mail"), len(changed)), nil
 			},
 		},
 		{

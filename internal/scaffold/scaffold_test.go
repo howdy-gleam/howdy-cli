@@ -108,9 +108,10 @@ func TestDatabaseOverlay(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.Database != SQLite {
-		t.Fatal("database should be SQLite by default")
+	if p.Database != Postgres {
+		t.Fatal("database should be PostgreSQL by default")
 	}
+	p.Database = SQLite
 	files, err := p.Files()
 	if err != nil {
 		t.Fatal(err)
@@ -292,6 +293,30 @@ func TestProjectsDependOnOneRelease(t *testing.T) {
 			if f.Path == "README.md" && !strings.Contains(content, "This project uses Howdy 2.3.1") {
 				t.Errorf("README.md (%s) does not say which release it uses", db.Label())
 			}
+		}
+	}
+}
+
+func TestRepositoryReplacesTheHowdyRepository(t *testing.T) {
+	p, err := New(filepath.Join(t.TempDir(), "demo_site"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.Repository = "https://git.example.com/me/howdy.git"
+	files, err := p.Files()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range files {
+		content := string(f.Content)
+		if strings.Contains(content, "mikeyjones/howdy.git") {
+			t.Errorf("%s still takes packages from %s", f.Path, Repository)
+		}
+		if f.Path == "gleam.toml" && !strings.Contains(content, `howdy = { git = "https://git.example.com/me/howdy.git", ref = "v`+Release+`" }`) {
+			t.Errorf("gleam.toml should take howdy from the repository:\n%s", content)
+		}
+		if f.Path == "README.md" && !strings.Contains(content, "from `https://git.example.com/me/howdy.git` at the Howdy") {
+			t.Error("README.md should say where the packages come from")
 		}
 	}
 }

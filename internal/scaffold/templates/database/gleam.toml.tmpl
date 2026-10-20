@@ -15,19 +15,19 @@ lustre = ">= 5.7.0 and < 6.0.0"
 {{- end}}
 dot_env = ">= 1.3.0 and < 2.0.0"
 gloo = ">= 1.0.2 and < 2.0.0"
-howdy = { git = "https://github.com/mikeyjones/howdy.git", ref = "v{{.Release}}" }
+{{dependency "howdy"}}
 {{- if not .API}}
-howdy_ui = { git = "https://github.com/mikeyjones/howdy.git", ref = "v{{.Release}}", path = "ui" }
+{{dependency "howdy_ui"}}
 {{- end}}
-howdy_database = { git = "https://github.com/mikeyjones/howdy.git", ref = "v{{.Release}}", path = "database" }
+{{dependency "howdy_database"}}
 {{- if .Full}}
-howdy_telemetry = { git = "https://github.com/mikeyjones/howdy.git", ref = "v{{.Release}}", path = "telemetry" }
+{{dependency "howdy_telemetry"}}
 {{- end}}
 
 [dev_dependencies]
-howdy_dev = { git = "https://github.com/mikeyjones/howdy.git", ref = "v{{.Release}}", path = "howdy_dev" }
+{{dependency "howdy_dev"}}
 {{- if .Full}}
-howdy_admin = { git = "https://github.com/mikeyjones/howdy.git", ref = "v{{.Release}}", path = "admin" }
+{{dependency "howdy_admin"}}
 gsh = ">= 1.3.0 and < 2.0.0"
 {{- end}}
 gleeunit = ">= 1.0.0 and < 2.0.0"

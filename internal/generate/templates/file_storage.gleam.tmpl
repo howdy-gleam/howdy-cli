@@ -1,0 +1,78 @@
+//// File storage, with Howdy Storage: uploads, exports and anything too big
+//// or too binary for a database column. The app's storage is `files` in
+//// its services; the tests keep files in memory instead.
+////
+//// With `S3_BUCKET` (or `BUCKET_NAME`) set, files go to that bucket on AWS
+//// S3, Cloudflare R2, Tigris, MinIO or another S3-compatible service,
+//// reached with the `AWS_*` variables: see `.env.example`. Without it they
+//// go to the folder `STORAGE_PATH`, `storage/` unless set.
+////
+//// A controller stores an upload under a fresh key and keeps the key:
+////
+////     let key = storage.new_key(prefix: "avatars", file_name: upload.file_name)
+////     storage.put_file(services.files, key, upload.path, content_type: "image/png")
+////
+//// and sends people to the file with a signed URL that expires:
+//// `storage.url(services.files, key, expires_in: 3600)`.
+
+import dot_env/env
+import howdy
+import howdy/storage
+import howdy/storage/local
+import howdy/storage/s3
+import logging
+
+/// The app's storage, from the environment. Make it once, at startup.
+pub fn from_env() -> storage.Storage {
+  case bucket_named() {
+    True -> {
+      let assert Ok(config) = s3.from_env()
+        as "S3_BUCKET is set, so AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY must be too"
+      s3.adapter(config)
+    }
+    False -> {
+      case secret() {
+        Ok(_) -> Nil
+        Error(Nil) ->
+          logging.log(
+            logging.Warning,
+            "STORAGE_SECRET is not set, so stored files get no URLs: see .env.example",
+          )
+      }
+      local.adapter(folder())
+    }
+  }
+}
+
+/// Serve the folder's files at `/files`, to anyone holding a URL that
+/// `storage.url` signed and that has not expired. A bucket serves its own
+/// files, so with one this adds nothing, and nor does a folder without
+/// `STORAGE_SECRET`, which has no URLs to answer.
+pub fn serve(app: howdy.App) -> howdy.App {
+  case bucket_named(), secret() {
+    False, Ok(_) -> howdy.controller(app, local.controller(folder()))
+    _, _ -> app
+  }
+}
+
+fn folder() -> local.Config {
+  let config = local.new(env.get_string_or("STORAGE_PATH", "storage"))
+  case secret() {
+    Ok(secret) -> local.serve(config, at: "/files", secret:)
+    Error(Nil) -> config
+  }
+}
+
+/// The key the folder's URLs are signed with: at least 32 random bytes,
+/// the same on every node.
+fn secret() -> Result(String, Nil) {
+  case env.get_string_or("STORAGE_SECRET", "") {
+    "" -> Error(Nil)
+    secret -> Ok(secret)
+  }
+}
+
+fn bucket_named() -> Bool {
+  env.get_string_or("S3_BUCKET", "") != ""
+  || env.get_string_or("BUCKET_NAME", "") != ""
+}

@@ -38,6 +38,11 @@ func (p *Project) Files() ([]File, error) {
 		"Database": string(p.Database),
 		// The Howdy release, such as "1.0.0", for its tag "v1.0.0".
 		"Release": p.Release,
+		// "git" or "hex": where the Howdy packages are downloaded from.
+		"Source": string(p.Source),
+		// The Git repository the packages come from when it is not
+		// Repository, such as a fork; "" otherwise.
+		"Repository": p.Repository,
 		// "true" unless --minimal: the admin, telemetry and console.
 		"Full": flag(!p.Minimal),
 		// "true" for --api-only: no Howdy UI, pages or static files.
@@ -61,9 +66,18 @@ func (p *Project) Files() ([]File, error) {
 	if p.API {
 		sets = append(sets, "templates/api")
 	}
+	source, err := ReleaseSource(p.Source, p.Release)
+	if err != nil {
+		return nil, err
+	}
+	if source.Kind == Git && p.Repository != "" {
+		source.Git = p.Repository
+	}
+	// {{dependency "howdy_ui"}} is the gleam.toml line for a Howdy package.
+	funcs := template.FuncMap{"dependency": source.Dependency}
 	byPath := map[string]File{}
 	for _, set := range sets {
-		if err := render(set, data, byPath); err != nil {
+		if err := render(set, data, funcs, byPath); err != nil {
 			return nil, err
 		}
 	}
@@ -154,7 +168,7 @@ func forAgents(path string) bool {
 
 // render every template under root into byPath, replacing earlier entries
 // for the same project path.
-func render(root string, data map[string]string, byPath map[string]File) error {
+func render(root string, data map[string]string, funcs template.FuncMap, byPath map[string]File) error {
 	return fs.WalkDir(templates, root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return err
@@ -163,7 +177,7 @@ func render(root string, data map[string]string, byPath map[string]File) error {
 		if err != nil {
 			return err
 		}
-		tmpl, err := template.New(path).Option("missingkey=error").Parse(string(src))
+		tmpl, err := template.New(path).Funcs(funcs).Option("missingkey=error").Parse(string(src))
 		if err != nil {
 			return fmt.Errorf("template %s: %w", path, err)
 		}

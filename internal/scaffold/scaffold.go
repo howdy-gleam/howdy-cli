@@ -23,8 +23,14 @@ type Project struct {
 	// example todo list, or NoDatabase for a page-only project.
 	Database Database
 	// Release is the Howdy release the project depends on, such as
-	// "1.0.0": its packages come from the tag "v" + Release.
+	// "1.0.0".
 	Release string
+	// Source is where the project downloads the packages of Release from:
+	// the tag "v" + Release of Repository, or Hex.
+	Source SourceKind
+	// Repository is the Git repository a git source takes the packages
+	// from, such as a fork or a private mirror; "" is Repository.
+	Repository string
 	// Minimal leaves out the development admin, telemetry and the GSH
 	// console, which every project gets otherwise.
 	Minimal bool
@@ -101,7 +107,8 @@ var reserved = map[string]bool{
 	"gleam": true, "erlang": true, "src": true, "dev": true, "priv": true,
 	"howdy": true, "howdy_ui": true, "howdy_dev": true, "howdy_database": true,
 	"howdy_admin": true, "howdy_telemetry": true, "howdy_auth": true,
-	"howdy_mail": true, "gsh": true, "console": true, "lustre": true,
+	"howdy_mail": true, "howdy_storage": true, "howdy_jobs": true,
+	"howdy_notifications": true, "howdy_i18n": true, "gsh": true, "console": true, "lustre": true,
 	"sketch": true, "ewe": true, "logging": true, "dot_env": true,
 	"gleeunit": true, "gloo": true, "tasks": true, "home": true, "todos": true,
 	"support": true, "pog": true,
@@ -133,8 +140,9 @@ func New(arg string) (*Project, error) {
 		Name:     name,
 		Title:    title(name),
 		Dir:      dir,
-		Database: SQLite,
+		Database: Postgres,
 		Release:  Release,
+		Source:   DefaultSource,
 		arg:      arg,
 	}, nil
 }

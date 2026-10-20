@@ -12,6 +12,7 @@ import gleam/result
 import gleam/string
 import gleam/uri
 import howdy/controller.{type GuardedContext}
+import howdy/problem.{type Problem}
 import howdy/service
 import howdy/ui
 import howdy/ui/button
@@ -109,7 +110,10 @@ pub fn checkbox(form: Form, name: String, label: String) -> Element(msg) {
 
 fn field_error(errors: List(service.FieldError), name: String) -> Element(msg) {
   case list.find(errors, fn(e) { e.field == name }) {
-    Ok(e) -> h.p([a.class("page-error"), a.role("alert")], [text(e.message)])
+    Ok(e) ->
+      h.p([a.class("page-error"), a.role("alert")], [
+        text(problem.message(e.problem, problem.english())),
+      ])
     Error(Nil) -> element.none()
   }
 }
@@ -150,7 +154,7 @@ pub fn whole_number(
 ) -> validate.Result(b) {
   case int.parse(string.trim(value(form, name))) {
     Ok(n) -> next(n)
-    Error(Nil) -> invalid(name, "must be a whole number", next(0))
+    Error(Nil) -> invalid(name, problem.NotInteger, next(0))
   }
 }
 
@@ -164,7 +168,8 @@ pub fn number(
   case float.parse(raw), int.parse(raw) {
     Ok(n), _ -> next(n)
     _, Ok(n) -> next(int.to_float(n))
-    _, _ -> invalid(name, "must be a number", next(0.0))
+    _, _ ->
+      invalid(name, problem.Custom("number", "must be a number"), next(0.0))
   }
 }
 
@@ -173,10 +178,10 @@ pub fn number(
 // any the stand-in caused.
 fn invalid(
   name: String,
-  message: String,
+  found: Problem,
   rest: validate.Result(b),
 ) -> validate.Result(b) {
-  let error = service.FieldError(name, message)
+  let error = service.FieldError(name, found)
   case rest {
     Ok(_) -> Error([error])
     Error(errors) -> Error([error, ..errors])

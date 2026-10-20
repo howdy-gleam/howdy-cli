@@ -5,6 +5,7 @@
 import gleam/int
 import gleam/list
 import gloo/repo.{type Repo}
+import howdy/problem
 import howdy/service
 import howdy/ui
 import howdy/ui/button
@@ -53,8 +54,8 @@ fn update(db: Repo, model: Model, msg: Msg) -> Model {
     Draft(draft) -> Model(..model, draft:)
     Add ->
       case todo_item.validate(todo_item.TodoInput(title: model.draft)) {
-        Error([service.FieldError(_, message), ..]) ->
-          Model(..model, notice: message)
+        Error([service.FieldError(_, found), ..]) ->
+          Model(..model, notice: problem.message(found, problem.english()))
         Error([]) -> Model(..model, notice: "Invalid todo")
         Ok(input) ->
           case todos.create(db, input) {

@@ -24,9 +24,11 @@ of every request, and a console runs Gleam inside the server.
 - Docker with Compose, to run PostgreSQL locally, or a PostgreSQL server of
   your own
 {{- end}}
+{{- if eq .Source "git"}}
 - Git to download Howdy and the development-only {{if .Full}}hot reload, admin
-  and console packages{{else}}hot reload package{{end}} from GitHub at the Howdy
+  and console packages{{else}}hot reload package{{end}} from {{if .Repository}}`{{.Repository}}`{{else}}GitHub{{end}} at the Howdy
   {{.Release}} release, tag `v{{.Release}}`, as configured in `gleam.toml`.
+{{- end}}
 
 ## Start the dev server
 
@@ -269,8 +271,17 @@ flags.user(id))`, and manage them {{if .Full}}in the admin or {{end}}with
 
 ## Upgrading Howdy
 
+{{if eq .Source "hex" -}}
+This project uses Howdy {{.Release}}: every Howdy package in `gleam.toml`
+comes from Hex, from its version in that release up to its next major
+version. `gleam update` moves them to the newest versions within those
+ranges, and `manifest.toml` records the ones in use. To move to a new major
+release, raise the ranges of every Howdy package together, run `gleam deps
+download`, and check the release's notes for anything you need to change.
+{{- else -}}
 This project uses Howdy {{.Release}}: every Howdy package in `gleam.toml`
 comes from the release tag `v{{.Release}}`, so they always match. To move
 to a newer release, change `ref = "v{{.Release}}"` to the new tag on every
 one of them, run `gleam deps download`, and check the release's notes for
 anything you need to change.
+{{- end}}

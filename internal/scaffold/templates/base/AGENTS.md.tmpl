@@ -171,6 +171,12 @@ Configuration is read from the environment and `.env` (see `.env.example`).
 
 ## Upgrading Howdy
 
+{{if eq .Source "hex" -}}
+Every Howdy package in `gleam.toml` comes from Hex, as a version range from
+Howdy {{.Release}}, and they must stay on one major release. Do not change
+one range without the others.
+{{- else -}}
 Every Howdy package in `gleam.toml` uses the tag `v{{.Release}}`, and they
-must stay on one release. Do not change one without the others. See
+must stay on one release. Do not change one without the others.
+{{- end}} See
 README.md for the rest of the project's documentation.
