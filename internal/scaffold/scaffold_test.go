@@ -397,7 +397,7 @@ func TestMinimalProject(t *testing.T) {
 }
 
 // An --api-only project is a JSON backend: no Howdy UI, Lustre, pages,
-// layouts or static files, and a health check in place of the home page.
+// layouts or static files.
 func TestAPIProject(t *testing.T) {
 	for _, minimal := range []bool{false, true} {
 		for _, db := range []Database{NoDatabase, SQLite, Postgres} {
@@ -438,12 +438,12 @@ func TestAPIProject(t *testing.T) {
 				}
 			}
 			for path, wants := range map[string][]string{
-				"gleam.toml":          {`description = "A Howdy API server`, `gleam_json = ">= 3.1.0 and < 4.0.0"`},
-				"src/demo_site.gleam": {"|> howdy.controller(health.controller())", "import demo_site/features/health/health_controller as health", "|> howdy.not_found(fn(ctx) {", `service.NotFound("Not found")`},
-				"src/demo_site/features/health/health_controller.gleam":       {`controller.new("health")`},
-				"test/demo_site/features/health/health_controller_test.gleam": {`get("/health")`},
-				"README.md":               {"howdy new --api-only", "curl http://127.0.0.1:8787/health"},
-				"dev/demo_site_dev.gleam": {"dev.new(fn() {"},
+				"gleam.toml":                             {`description = "A Howdy API server`, `gleam_json = ">= 3.1.0 and < 4.0.0"`},
+				"src/demo_site.gleam":                    {"|> howdy.health_check(health.new())", "|> howdy.not_found(fn(ctx) {", `service.NotFound("Not found")`},
+				"test/demo_site/health_check_test.gleam": {`testing.get("/up")`},
+				"test/demo_site/not_found_test.gleam":    {`testing.get("/no/such/route")`},
+				"README.md":                              {"howdy new --api-only", "curl http://127.0.0.1:8787/up"},
+				"dev/demo_site_dev.gleam":                {"dev.new(fn() {"},
 			} {
 				for _, want := range wants {
 					if !strings.Contains(byPath[path], want) {
@@ -576,6 +576,135 @@ func TestNoAgents(t *testing.T) {
 		}
 		if len(files) < 10 {
 			t.Errorf("--no-agents (api %t) should keep the rest of the project: %d files", api, len(files))
+		}
+	}
+}
+
+// Every project is ready to run in production: GET /up for health checks,
+// a server that drains on SIGTERM, and migrations that replicas starting
+// together take turns to apply.
+func TestProjectsAreReadyToDeploy(t *testing.T) {
+	for _, api := range []bool{false, true} {
+		for _, db := range []Database{NoDatabase, SQLite, Postgres} {
+			label := db.Label()
+			if api {
+				label += ", API"
+			}
+			p, err := New(filepath.Join(t.TempDir(), "demo_site"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			p.Database, p.API = db, api
+			files, err := p.Files()
+			if err != nil {
+				t.Fatal(err)
+			}
+			byPath := map[string]string{}
+			for _, f := range files {
+				byPath[f.Path] = string(f.Content)
+			}
+			wants := map[string][]string{
+				"src/demo_site.gleam": {
+					"|> howdy.health_check(health.new())",
+					"|> howdy.shutdown_timeout(8000)",
+					"|> supervisor.add(howdy.supervised(configured(services)))",
+					`|> howdy.start_application(name: "demo_site_server")`,
+				},
+				"gleam.toml":                             {`gleam_otp = ">= 1.2.0 and < 2.0.0"`},
+				"test/demo_site/health_check_test.gleam": {`testing.get("/up")`},
+				"README.md":                              {"## Deploy", "`GET /up`"},
+			}
+			if db != NoDatabase {
+				wants["src/demo_site.gleam"] = append(wants["src/demo_site.gleam"], `env.get_bool_or("MIGRATE_ON_START", True)`)
+				wants["src/demo_site/platform/database.gleam"] = []string{"use db <- one_at_a_time(db)", "howdy_database.lock_migrations(conn)"}
+				wants[".env.example"] = []string{"MIGRATE_ON_START"}
+			}
+			for path, ws := range wants {
+				for _, want := range ws {
+					if !strings.Contains(byPath[path], want) {
+						t.Errorf("%s (%s) should contain %q", path, label, want)
+					}
+				}
+			}
+			if strings.Contains(byPath["src/demo_site.gleam"], "|> howdy.start\n") {
+				t.Errorf("src/demo_site.gleam (%s) still starts the server outside an application", label)
+			}
+		}
+	}
+}
+
+func TestDockerFiles(t *testing.T) {
+	for _, db := range []Database{NoDatabase, SQLite, Postgres} {
+		p, err := New(filepath.Join(t.TempDir(), "demo_site"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		p.Database, p.Gleam, p.Erlang = db, "1.18.1", "28"
+		if _, err := p.Write(nil); err != nil {
+			t.Fatal(err)
+		}
+		read := func(path string) string {
+			src, err := os.ReadFile(filepath.Join(p.Dir, path))
+			if err != nil {
+				t.Errorf("%s (%s): %v", path, db.Label(), err)
+			}
+			return string(src)
+		}
+		dockerfile := read("Dockerfile")
+		for _, want := range []string{
+			"ARG GLEAM_VERSION=v1.18.1", "ARG ERLANG_VERSION=28",
+			"RUN gleam export erlang-shipment", "COPY --chown=app bin/start /app/bin/start",
+			"wget -qO /dev/null http://127.0.0.1:8787/up", `ENTRYPOINT ["/app/bin/start"]`,
+		} {
+			if !strings.Contains(dockerfile, want) {
+				t.Errorf("Dockerfile (%s) should contain %q", db.Label(), want)
+			}
+		}
+		// Gloo brings a native driver, whichever database the project uses.
+		if got := strings.Contains(dockerfile, "build-base"); got != (db != NoDatabase) {
+			t.Errorf("Dockerfile (%s) installs build-base: %v", db.Label(), got)
+		}
+		if got := strings.Contains(dockerfile, "VOLUME /data"); got != (db == SQLite) {
+			t.Errorf("Dockerfile (%s) has a /data volume: %v", db.Label(), got)
+		}
+		start := read("bin/start")
+		if got := strings.Contains(start, "tasks@migrate"); got != (db != NoDatabase) {
+			t.Errorf("bin/start (%s) can migrate: %v", db.Label(), got)
+		}
+		if !strings.Contains(start, "PACKAGE=demo_site") || !strings.HasPrefix(start, "#!/bin/sh\n") {
+			t.Errorf("bin/start (%s) does not start demo_site", db.Label())
+		}
+		if info, err := os.Stat(filepath.Join(p.Dir, "bin/start")); err != nil || info.Mode().Perm() != 0o755 {
+			t.Errorf("bin/start (%s) should be executable", db.Label())
+		}
+		if !strings.Contains(read(".dockerignore"), "\n.env\n") {
+			t.Errorf(".dockerignore (%s) should keep .env out of the image", db.Label())
+		}
+		if db == Postgres && !strings.Contains(read("docker-compose.yml"), "profiles: [app]") {
+			t.Error("docker-compose.yml should offer the app under a profile")
+		}
+	}
+}
+
+func TestNoDocker(t *testing.T) {
+	p, err := New(filepath.Join(t.TempDir(), "demo_site"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.Database, p.NoDocker = Postgres, true
+	files, err := p.Files()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range files {
+		switch f.Path {
+		case "Dockerfile", ".dockerignore", "bin/start":
+			t.Errorf("--no-docker should leave out %s", f.Path)
+		}
+		for _, word := range []string{"bin/start", "Dockerfile", "profiles:"} {
+			if strings.Contains(string(f.Content), word) {
+				t.Errorf("%s mentions %q without the Docker files", f.Path, word)
+			}
 		}
 	}
 }

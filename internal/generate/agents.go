@@ -51,6 +51,14 @@ Howdy OpenAPI serves ` + "`/openapi.json`" + ` and ` + "`/docs`" + `, configured
 ` + "`howdy/openapi/endpoint`" + ` (` + "`endpoint.get`" + `, ` + "`endpoint.post`" + ` and so on, from the
 schemas they read) are documented, so write new JSON routes that way.
 `,
+	"docker": `## Deploying
+
+` + "`Dockerfile`" + ` builds the image to deploy, and ` + "`bin/start`" + ` starts the app in
+it: ` + "`bin/start run`" + `, ` + "`bin/start migrate`" + ` for a database, or ` + "`bin/start remote`" + `
+for a shell inside it. The image's health check asks ` + "`GET /up`" + `. Something the
+app keeps running, such as a pool or a poller, goes in the supervision tree
+` + "`main`" + ` starts, so it stops cleanly with the server.
+`,
 	"remote": `## Remote calls
 
 Howdy Remote is installed. The procedures the app serves are defined in

@@ -1,0 +1,16 @@
+import gleam/http/response
+import gleam/string
+import howdy/testing
+import {{.Name}}/support
+
+pub fn unknown_routes_get_json_test() {
+{{- if .Database}}
+  use db <- support.with_db()
+  let res = testing.get("/no/such/route") |> testing.send(support.app(db))
+{{- else}}
+  let res = testing.get("/no/such/route") |> testing.send(support.app())
+{{- end}}
+  assert res.status == 404
+  let assert Ok(content_type) = response.get_header(res, "content-type")
+  assert string.starts_with(content_type, "application/json")
+}

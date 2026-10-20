@@ -46,11 +46,36 @@ Every project also has an `AGENTS.md` and skills for coding agents, with
 `CLAUDE.md` importing it, unless `--no-agents` is given: see
 [Working with coding agents](#working-with-coding-agents).
 
+Every project is ready to deploy:
+
+- `GET /up` answers `{"status":"ok"}` while the app runs, mounted with
+  `howdy.health_check`. It's answered ahead of the routes, middleware
+  and request log.
+- `main` starts the server in a supervision tree owned by an OTP
+  application (`howdy.start_application`). On SIGTERM it stops taking
+  connections and gives requests in flight 8 seconds to finish, inside
+  `docker stop`'s 10.
+- With a database, `migrate` runs the migrations in one transaction
+  holding Howdy's migration lock, so replicas starting together take
+  turns. `MIGRATE_ON_START=false` skips them at startup.
+- A `Dockerfile` builds the app with `gleam export erlang-shipment` and
+  runs it on the same `erlang:<otp>-alpine` image, using the Gleam and
+  Erlang versions installed where `howdy new` ran.
+- `.dockerignore` keeps `build/`, `.env` and local data out of the image.
+- `bin/start` starts the app in the image with `run`, `migrate` (with a
+  database) or `remote`, an Erlang shell inside it. It names the node from
+  `HOWDY_NODE_NAME`, writes `HOWDY_COOKIE` to `~/.erlang.cookie`, and pins
+  distribution to `HOWDY_DIST_PORT`.
+- A PostgreSQL project's `docker-compose.yml` gets the app under the `app`
+  profile.
+
+`--no-docker` leaves out the Dockerfile, `.dockerignore` and `bin/start`;
+`howdy add docker` adds them later.
+
 Pass `--api-only` for a JSON backend with no pages: the project leaves out
 Howdy UI and Lustre, the home page, layouts, static files, the stylesheet
-task and the HTML 404 page, and serves a health check at `GET /health`
-(`src/<project>/features/health/health_controller.gleam`) instead. A request no
-route matches gets Howdy's JSON 404 error through `howdy.not_found`. With a
+task and the HTML 404 page. A request no route matches gets Howdy's JSON
+404 error through `howdy.not_found`. With a
 database it keeps the todos JSON API, and it combines with `--minimal` and
 `--database` as usual. In a project without `howdy_ui` in `gleam.toml` the
 `create` commands for pages, layouts and components are refused;
@@ -398,6 +423,18 @@ gets Flags: kill switches, rules, groups and history. Check a flag with
 flags.user(id))`.
 
 ```sh
+howdy add docker
+```
+
+adds the files `howdy new` writes for containers to a project made with
+`--no-docker`, or before they existed: the `Dockerfile`, `.dockerignore`
+and `bin/start`, for the Gleam and Erlang installed here. Files the project
+already has are left alone. The image's `HEALTHCHECK` asks `GET /up`, so the
+app gets `|> howdy.health_check(health.new())` after `howdy.new()` if it
+lacks one. A `main` that starts the server outside an OTP application is
+reported as a step by hand, since SIGTERM would cut off requests in flight.
+
+```sh
 howdy create email password_reset
 ```
 
@@ -534,7 +571,7 @@ go install .
 main.go
 internal/
 ├── cli/        cobra commands (root, new, create, add, dev, routes, check, upgrade), and the --json and --dry-run output
-├── generate/   `howdy create controller`, `pages`, `repo`, `migration`, `page`, `live_page`, `layout`, `component`, `live_component` and `email`, and `howdy add mail`, `auth`, `remote`, `openapi` and `flags`: templates and wiring
+├── generate/   `howdy create controller`, `pages`, `repo`, `migration`, `page`, `live_page`, `layout`, `component`, `live_component` and `email`, and `howdy add mail`, `auth`, `remote`, `openapi`, `flags` and `docker`: templates and wiring
 ├── inspect/    reading a project's sources for `howdy routes`
 ├── scaffold/   project validation and template rendering
 │   └── templates/
@@ -542,7 +579,8 @@ internal/
 │       ├── database/  files added or overridden when a database is included
 │       ├── postgres/  files overriding database/ for --database postgres
 │       ├── full/      files only a project without --minimal has
-│       └── api/       files only a project with --api-only has
+│       ├── api/       files only a project with --api-only has
+│       └── docker/    the Dockerfile, .dockerignore and bin/start, left out with --no-docker
 ├── tools/      finding and running gleam / erl
 ├── tui/        Bubble Tea step runner and styles
 └── upgrade/    `howdy upgrade`: finding, verifying and installing a GitHub release
@@ -557,7 +595,8 @@ by only a line or two between the databases stay in `database` and branch on
 console are added to the shared files with `{{if .Full}}`, which is set
 unless `--minimal` is given; `full` only holds files no other set has.
 `--api-only` works the same way with `{{.API}}`, and its `api` set is
-rendered last; the files that only serve pages (the site, layouts,
+rendered after the others but `docker`, which `howdy add docker` also
+renders on its own; the files that only serve pages (the site, layouts,
 `priv/`, the stylesheet task and the HTML 404) are left out of an API
 project by `uiOnly` in `internal/scaffold/templates.go`. The
 published stylesheet `priv/public/assets/ui.css` is what `gleam run -m

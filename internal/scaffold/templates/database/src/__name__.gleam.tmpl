@@ -10,6 +10,7 @@ import dot_env/env
 import gleam/erlang/application
 {{- end}}
 import gleam/erlang/process
+import gleam/otp/static_supervisor as supervisor
 import gloo/adapter/sqlite
 import gloo/repo.{type Repo}
 import howdy
@@ -17,6 +18,7 @@ import howdy
 import howdy/console
 import howdy/database as howdy_database
 {{- end}}
+import howdy/health
 import howdy/logger
 {{- if .API}}
 import howdy/service
@@ -27,9 +29,6 @@ import howdy/static
 import howdy/telemetry
 {{- end}}
 import logging
-{{- if .API}}
-import {{.Name}}/features/health/health_controller as health
-{{- end}}
 import {{.Name}}/platform/database
 {{- if not .API}}
 import {{.Name}}/platform/not_found
@@ -51,7 +50,6 @@ pub fn app(services: Services) -> howdy.App {
   howdy.new()
   |> howdy.controller(todos.controller(db))
 {{- if .API}}
-  |> howdy.controller(health.controller())
   // A request no route matches gets the same JSON error as a controller's.
   |> howdy.not_found(fn(ctx) {
     service.error_response(ctx, service.NotFound("Not found"))
@@ -63,6 +61,9 @@ pub fn app(services: Services) -> howdy.App {
   // People get the 404 page, API clients JSON: see platform/not_found.gleam.
   |> howdy.middleware(not_found.middleware)
 {{- end}}
+  // GET /up answers 200 while the app runs, for load balancers and
+  // container platforms, ahead of the routes, middleware and request log.
+  |> howdy.health_check(health.new())
 }
 
 {{- if not .API}}
@@ -140,6 +141,9 @@ pub fn configured(services: Services) -> howdy.App {
   |> howdy.middleware(logger.log)
   |> howdy.bind(host)
   |> howdy.listening(port)
+  // When the app is stopped, requests in flight get 8 seconds to finish:
+  // inside the 10 seconds `docker stop` waits before killing it.
+  |> howdy.shutdown_timeout(8000)
 }
 
 pub fn main() -> Nil {
@@ -148,14 +152,28 @@ pub fn main() -> Nil {
   start_telemetry()
 {{- end}}
   let db = database()
-  // Migrations run at startup so `gleam run` works straight away. For a
-  // production deployment you may prefer to migrate separately with
-  // `gleam run -m tasks/migrate` and remove this line.
-  let assert Ok(_) = database.migrate(db)
+  // Apply new migrations before serving, so a release that cannot migrate
+  // never starts. Copies of the app starting together take turns. Set
+  // MIGRATE_ON_START=false where migrations run as a step of their own,
+  // such as {{if .Docker}}`bin/start migrate`{{else}}`gleam run -m tasks/migrate`{{end}} before a deploy.
+  case env.get_bool_or("MIGRATE_ON_START", True) {
+    True -> {
+      let assert Ok(_) = database.migrate(db)
+      Nil
+    }
+    False -> Nil
+  }
   let services = Services(db:)
 {{- if .Full}}
   expose(services)
 {{- end}}
-  let assert Ok(_) = configured(services) |> howdy.start
+  // The server runs in a supervision tree owned by an OTP application, so
+  // stopping the node, as SIGTERM from `docker stop` does, stops it in
+  // order: it stops listening and lets requests in flight finish. Add
+  // anything else the app keeps running to the tree.
+  let assert Ok(_) =
+    supervisor.new(supervisor.OneForOne)
+    |> supervisor.add(howdy.supervised(configured(services)))
+    |> howdy.start_application(name: "{{.Name}}_server")
   process.sleep_forever()
 }

@@ -1,0 +1,10 @@
+# Left out of the image build: rebuilt inside it, local only, or secret.
+.git
+build
+.env
+erl_crash.dump
+tmp
+{{- if eq .Database "sqlite"}}
+*.sqlite3
+*.sqlite3-*
+{{- end}}

@@ -108,6 +108,11 @@ Run `howdy <command> --help` for the details of each.
 - `test/{{.Name}}/` mirrors `src/`. `test/{{.Name}}/support.gleam` builds the
   app for tests{{if .Database}}, and `support.with_db` gives each test a fresh database{{end}}.
 - `dev/{{.Name}}_dev.gleam` is the `gleam dev` entry point{{if .Full}}, which also mounts the admin{{end}}.
+{{- if .Docker}}
+- `Dockerfile` builds the image to deploy, and `bin/start` starts the app in
+  it. Something the app keeps running, such as a pool or a poller, goes in
+  the supervision tree `main` starts, so it stops cleanly with the server.
+{{- end}}
 {{- if .Database}}
 - `src/tasks/` holds `gleam run -m tasks/<name>` scripts, such as `tasks/migrate`.
 {{- end}}

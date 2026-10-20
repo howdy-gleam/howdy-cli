@@ -25,7 +25,7 @@ pub fn lists_notes_test() {
   use db <- support.with_db()            // a fresh, migrated database for this test
   let res = testing.get("/api/notes") |> testing.send(support.app(db))
 {{- else}}
-  let res = testing.get("/health") |> testing.send(support.app())
+  let res = testing.get("/up") |> testing.send(support.app())
 {{- end}}
   assert res.status == 200
   assert response.get_header(res, "content-type")

@@ -5,6 +5,7 @@ import (
 	"embed"
 	"fmt"
 	"io/fs"
+	"os"
 	"sort"
 	"strings"
 	"text/template"
@@ -15,8 +16,9 @@ import (
 // a SQLite database, and templates/postgres overrides those again for
 // PostgreSQL. templates/full adds the files only a project with the admin,
 // telemetry and console has, and templates/api the files only a project
-// made with --api-only has. An API project leaves out every file for pages
-// (see uiOnly). A file is rendered with text/template, "__name__" in
+// made with --api-only has, and templates/docker the files for building
+// and running the app in a container, left out with --no-docker. An API
+// project leaves out every file for pages (see uiOnly). A file is rendered with text/template, "__name__" in
 // a path is replaced by the project name, and a trailing ".tmpl" is dropped.
 //
 //go:embed all:templates
@@ -29,22 +31,18 @@ type File struct {
 	Content []byte
 }
 
+// Mode is the permissions the file is written with: scripts such as
+// bin/start are executable.
+func (f File) Mode() os.FileMode {
+	if strings.HasPrefix(f.Path, "bin/") {
+		return 0o755
+	}
+	return 0o644
+}
+
 // Files renders every template for the project, sorted by path.
 func (p *Project) Files() ([]File, error) {
-	data := map[string]string{
-		"Name":  p.Name,
-		"Title": p.Title,
-		// "sqlite", "postgres" or "" for small differences within a file.
-		"Database": string(p.Database),
-		// The Howdy release, such as "1.0.0", for its tag "v1.0.0".
-		"Release": p.Release,
-		// "true" unless --minimal: the admin, telemetry and console.
-		"Full": flag(!p.Minimal),
-		// "true" for --api-only: no Howdy UI, pages or static files.
-		"API": flag(p.API),
-		// The layout a layout template is rendered as; "default" here.
-		"Layout": "default",
-	}
+	data := p.data()
 	sets := []string{"templates/base"}
 	if p.Database != NoDatabase {
 		sets = append(sets, "templates/database")
@@ -57,6 +55,9 @@ func (p *Project) Files() ([]File, error) {
 	}
 	if p.API {
 		sets = append(sets, "templates/api")
+	}
+	if !p.NoDocker {
+		sets = append(sets, "templates/docker")
 	}
 	byPath := map[string]File{}
 	for _, set := range sets {
@@ -73,6 +74,44 @@ func (p *Project) Files() ([]File, error) {
 	}
 	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
 	return files, nil
+}
+
+// DockerFiles renders only the files for containers, sorted by path, for
+// 'howdy add docker'.
+func (p *Project) DockerFiles() ([]File, error) {
+	byPath := map[string]File{}
+	if err := render("templates/docker", p.data(), byPath); err != nil {
+		return nil, err
+	}
+	files := make([]File, 0, len(byPath))
+	for _, f := range byPath {
+		files = append(files, f)
+	}
+	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
+	return files, nil
+}
+
+// data is what the templates are rendered with.
+func (p *Project) data() map[string]string {
+	return map[string]string{
+		"Name":  p.Name,
+		"Title": p.Title,
+		// "sqlite", "postgres" or "" for small differences within a file.
+		"Database": string(p.Database),
+		// The Howdy release, such as "1.0.0", for its tag "v1.0.0".
+		"Release": p.Release,
+		// "true" unless --minimal: the admin, telemetry and console.
+		"Full": flag(!p.Minimal),
+		// "true" for --api-only: no Howdy UI, pages or static files.
+		"API": flag(p.API),
+		// The layout a layout template is rendered as; "default" here.
+		"Layout": "default",
+		// "true" unless --no-docker: the Dockerfile and bin/start.
+		"Docker": flag(!p.NoDocker),
+		// The versions the Dockerfile uses, such as "1.19.2" and "29".
+		"Gleam":  p.Gleam,
+		"Erlang": p.Erlang,
+	}
 }
 
 const layoutTemplate = "templates/base/src/__name__/layouts/default_layout.gleam.tmpl"

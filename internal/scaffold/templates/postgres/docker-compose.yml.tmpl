@@ -24,6 +24,22 @@ services:
       interval: 2s
       timeout: 5s
       retries: 15
+{{- if .Docker}}
+
+  # The app in the image the Dockerfile builds, to try it before deploying:
+  # `docker compose --profile app up --build`, then open
+  # http://127.0.0.1:8787. Stop the dev server first: it uses the same port.
+  app:
+    profiles: [app]
+    build: .
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/{{.Name}}_dev
+    ports:
+      - "127.0.0.1:8787:8787"
+    depends_on:
+      postgres:
+        condition: service_healthy
+{{- end}}
 
 volumes:
   postgres_data:

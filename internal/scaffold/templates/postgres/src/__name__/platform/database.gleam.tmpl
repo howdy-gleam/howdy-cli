@@ -9,9 +9,8 @@ import gloo/error
 import gloo/repo.{type Repo}
 import gloo/runner
 import gloo/telemetry
-{{- if .Full}}
-import howdy/database
-{{- end}}
+import howdy/database as howdy_database
+import howdy/service
 import pog
 import {{.Name}}/migrations/create_todos
 
@@ -44,7 +43,7 @@ pub fn connect(url: String) -> Result(Repo, String) {
     ))
 {{- if .Full}}
     // Report every query as a span, so traces show the SQL a request ran.
-    |> database.traced
+    |> howdy_database.traced
 {{- end}}
   use _ <- result.try(wait_until_ready(db, 5))
   Ok(db)
@@ -71,7 +70,13 @@ fn wait_until_ready(db: Repo, attempts: Int) -> Result(Nil, String) {
 
 /// Apply every migration that has not run yet. Add new migrations to the
 /// list with a higher version; never edit one that has been applied.
+///
+/// The migrations run in one transaction that holds the migration lock, so
+/// copies of the app that start at the same time take turns: the first
+/// applies them and the others wait, then find nothing left to do. If one
+/// fails, none of them is applied.
 pub fn migrate(db: Repo) -> Result(Int, String) {
+  use db <- one_at_a_time(db)
   runner.run(db, [create_todos.migration()], runner.Up, option.None)
   |> result.map_error(fn(e) {
     case e {
@@ -79,4 +84,17 @@ pub fn migrate(db: Repo) -> Result(Int, String) {
       runner.MigrationFailed(_, _, message) -> message
     }
   })
+}
+
+/// Run `migrate` in a transaction holding the lock Howdy's own migrations
+/// take, a PostgreSQL advisory lock, until it commits or rolls back.
+fn one_at_a_time(
+  db: Repo,
+  migrate: fn(Repo) -> Result(Int, String),
+) -> Result(Int, String) {
+  howdy_database.transaction(db, fn(conn) {
+    use _ <- result.try(howdy_database.lock_migrations(conn))
+    migrate(conn) |> result.map_error(service.Internal)
+  })
+  |> result.map_error(service.message)
 }

@@ -21,6 +21,7 @@ type newOptions struct {
 	minimal    bool
 	apiOnly    bool
 	noAgents   bool
+	noDocker   bool
 	skipDeps   bool
 	out        output
 }
@@ -52,9 +53,17 @@ CLAUDE.md imports it for Claude Code, and .claude/skills/ holds guides for
 common tasks. Pass --no-agents to leave all three out.
 
 Pass --api-only for a JSON backend with no pages: it leaves out Howdy UI,
-Lustre, the home page, layouts, static files and the HTML 404 page, and
-serves a health check at /health instead. With a database it keeps the
-todos JSON API.
+Lustre, the home page, layouts, static files and the HTML 404 page. With a
+database it keeps the todos JSON API.
+
+Every project is ready to deploy. GET /up answers 200 while the app runs,
+for load balancers and container platforms. The server stops cleanly on
+SIGTERM, letting requests in flight finish, and copies of the app that
+start together take turns to migrate. A Dockerfile builds an image that
+runs the app with bin/start, which also runs migrations on their own
+(bin/start migrate). It uses the Gleam and Erlang versions installed here.
+Pass --no-docker to leave out the Dockerfile, .dockerignore and bin/start;
+'howdy add docker' adds them later.
 
 Howdy packages are downloaded from GitHub at a release tag, so they always
 match. By default that is Howdy ` + scaffold.Release + `, the release these
@@ -65,7 +74,7 @@ underscores, starting with a letter. It cannot be the name of a module that
 ships with Erlang, such as pg, auth or timer, which the project's own module
 would replace. A path such as apps/my_site also works; the last segment is the
 project name.`,
-		Example: "  howdy new my_site\n  howdy new my_site --database postgres\n  howdy new my_site --no-database\n  howdy new my_site --minimal\n  howdy new my_api --api-only\n  howdy new my_site --no-agents\n  howdy new my_site --howdy 1.0.0\n  howdy new apps/my_site\n  howdy new my_site --dry-run --json",
+		Example: "  howdy new my_site\n  howdy new my_site --database postgres\n  howdy new my_site --no-database\n  howdy new my_site --minimal\n  howdy new my_api --api-only\n  howdy new my_site --no-agents\n  howdy new my_site --no-docker\n  howdy new my_site --howdy 1.0.0\n  howdy new apps/my_site\n  howdy new my_site --dry-run --json",
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if opts.noDatabase && cmd.Flags().Changed("database") {
@@ -80,6 +89,7 @@ project name.`,
 	cmd.Flags().BoolVar(&opts.minimal, "minimal", false, "leave out the admin, telemetry and the console")
 	cmd.Flags().BoolVar(&opts.noAgents, "no-agents", false, "leave out AGENTS.md, CLAUDE.md and the skills in .claude/skills/ for coding agents")
 	cmd.Flags().BoolVar(&opts.apiOnly, "api-only", false, "a JSON backend only: leave out Howdy UI, pages, layouts and static files")
+	cmd.Flags().BoolVar(&opts.noDocker, "no-docker", false, "leave out the Dockerfile, .dockerignore and bin/start")
 	cmd.Flags().BoolVar(&opts.skipDeps, "skip-deps", false, "do not run 'gleam deps download' after creating the files")
 	opts.out.flags(cmd, true)
 	return cmd
@@ -106,6 +116,16 @@ func runNew(arg string, opts *newOptions) error {
 	project.Minimal = opts.minimal
 	project.API = opts.apiOnly
 	project.NoAgents = opts.noAgents
+	project.NoDocker = opts.noDocker
+	if !project.NoDocker {
+		// The image builds and runs with what the project was made with.
+		if gleam, err := tools.FindGleam(); err == nil && gleam.GleamRelease() != "" {
+			project.Gleam = gleam.GleamRelease()
+		}
+		if erlang := tools.ErlangRelease(); erlang != "" {
+			project.Erlang = erlang
+		}
+	}
 	files, err := project.Files()
 	if err != nil {
 		return err
@@ -211,7 +231,7 @@ func nextSteps(project *scaffold.Project) []tui.Command {
 		commands = append(commands, tui.Command{Cmd: "docker compose up -d", Note: "start PostgreSQL, needed by the app and the tests"})
 	}
 	if project.API {
-		commands = append(commands, tui.Command{Cmd: "gleam dev", Note: "start with hot reload, then curl http://127.0.0.1:8787/health"})
+		commands = append(commands, tui.Command{Cmd: "gleam dev", Note: "start with hot reload, then curl http://127.0.0.1:8787/up"})
 	} else {
 		commands = append(commands, tui.Command{Cmd: "gleam dev", Note: "start with hot reload, then open http://127.0.0.1:8787"})
 	}
@@ -225,10 +245,13 @@ func nextSteps(project *scaffold.Project) []tui.Command {
 	if project.Database != scaffold.NoDatabase {
 		commands = append(commands, tui.Command{Cmd: "gleam run -m tasks/migrate", Note: "apply migrations without starting the server"})
 	}
-	if project.API {
-		return commands
+	if !project.API {
+		commands = append(commands, tui.Command{Cmd: "gleam run -m tasks/css", Note: "regenerate priv/public/assets/ui.css after changing themes"})
 	}
-	return append(commands, tui.Command{Cmd: "gleam run -m tasks/css", Note: "regenerate priv/public/assets/ui.css after changing themes"})
+	if !project.NoDocker {
+		commands = append(commands, tui.Command{Cmd: "docker build -t " + project.Name + " .", Note: "build the image to deploy; README.md shows how to run it"})
+	}
+	return commands
 }
 
 func notes(project *scaffold.Project) []string {
@@ -238,8 +261,8 @@ func notes(project *scaffold.Project) []string {
 	}
 	if project.API {
 		notes = []string{
-			fmt.Sprintf("The health check lives in src/%s/features/health/health_controller.gleam. Add features beside it and", n),
-			fmt.Sprintf("register them in src/%s.gleam; unknown routes answer with Howdy's JSON 404.", n),
+			fmt.Sprintf("Add features in src/%s/features/ and register them in src/%s.gleam; unknown routes answer", n, n),
+			"with Howdy's JSON 404. GET /up answers 200 while the app runs, for load balancers.",
 		}
 	}
 	if !project.Minimal {
@@ -265,6 +288,9 @@ func notes(project *scaffold.Project) []string {
 	case scaffold.Postgres:
 		notes = append(notes, fmt.Sprintf("docker-compose.yml runs PostgreSQL on port 5432 with the databases %s_dev and %s_test; the app migrates on start.", n, n))
 		env = "Copy .env.example to .env to change the port or DATABASE_URL."
+	}
+	if !project.NoDocker {
+		notes = append(notes, fmt.Sprintf("The Dockerfile builds on Gleam %s and Erlang/OTP %s, the versions installed here.", project.Gleam, project.Erlang))
 	}
 	return append(notes, env+" See README.md for the project layout.")
 }

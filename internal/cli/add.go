@@ -24,7 +24,120 @@ func addCommand() *cobra.Command {
 	cmd.AddCommand(addRemoteCommand())
 	cmd.AddCommand(addOpenAPICommand())
 	cmd.AddCommand(addFlagsCommand())
+	cmd.AddCommand(addDockerCommand())
 	return cmd
+}
+
+func addDockerCommand() *cobra.Command {
+	out := &output{}
+	cmd := &cobra.Command{
+		Use:   "docker",
+		Short: "Add a Dockerfile that builds an image to deploy, and bin/start to run the app in it",
+		Long: `Add the files 'howdy new' writes for containers to the current project:
+
+  Dockerfile      builds the app with Gleam and runs it on the same Erlang image
+  .dockerignore   keeps build/, .env and local data out of the build
+  bin/start       starts the app in the image: run, migrate or remote
+
+The image uses the Gleam and Erlang versions installed here. Files the
+project already has are left alone.
+
+The image's health check asks GET /up, so the app gets howdy.health_check
+if it does not have it. A project made before 'howdy new' wrote these files
+may need a hand to stop cleanly on SIGTERM; the command says what to change.`,
+		Example: "  howdy add docker",
+		Args:    cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runAddDocker(out)
+		},
+	}
+	out.flags(cmd, true)
+	return cmd
+}
+
+func runAddDocker(out *output) error {
+	defer out.cleanup()
+	dir, err := out.projectDir()
+	if err != nil {
+		return err
+	}
+	project, err := generate.Open(dir)
+	if err != nil {
+		return err
+	}
+
+	var gleam tools.Tool
+	var docker *generate.Docker
+	var kept, manual []string
+	steps := []tui.Step{
+		{
+			Title: "Checking for Gleam and Erlang",
+			Run: func(r tui.Reporter) (string, error) {
+				var err error
+				if gleam, err = tools.FindGleam(); err != nil {
+					return "", err
+				}
+				docker = generate.NewDocker(project, gleam.GleamRelease(), tools.ErlangRelease())
+				return fmt.Sprintf("Gleam %s, Erlang/OTP %s", docker.Gleam, docker.Erlang), nil
+			},
+		},
+		{
+			Title: "Writing the container files",
+			Run: func(r tui.Reporter) (string, error) {
+				written, k, err := docker.Write()
+				kept = k
+				for _, path := range written {
+					r.Log(path)
+				}
+				if err != nil {
+					return "", err
+				}
+				if len(written) == 0 {
+					return "the project has them all", nil
+				}
+				return strings.Join(written, ", "), nil
+			},
+		},
+		{
+			Title: "Checking the app runs in a container",
+			Run: func(r tui.Reporter) (string, error) {
+				manual = docker.Register()
+				if len(manual) > 0 {
+					return "needs a hand, see below", nil
+				}
+				return "/up, clean stops", nil
+			},
+		},
+		noteForAgents(project, "docker"),
+		{
+			Title: "Formatting Gleam sources",
+			Run: func(r tui.Reporter) (string, error) {
+				return "gleam format", gleam.Run(dir, "format", "src")
+			},
+		},
+	}
+	if err := out.run("howdy add docker", steps); err != nil {
+		return err
+	}
+
+	var notes []string
+	if len(kept) > 0 {
+		notes = append(notes, "Left as they were: "+strings.Join(kept, ", ")+".")
+	}
+	notes = append(notes, fmt.Sprintf("The image builds on Gleam %s and Erlang/OTP %s; change them at the top of the Dockerfile.", docker.Gleam, docker.Erlang))
+	run := "docker run --rm -p 8787:8787 " + project.Name
+	switch project.Database {
+	case "sqlite":
+		run = "docker run --rm -p 8787:8787 -v " + project.Name + "_data:/data " + project.Name
+		notes = append(notes, "The SQLite database is kept in the /data volume; run one container at a time.")
+	case "postgres":
+		run = "docker run --rm -p 8787:8787 -e DATABASE_URL=postgres://... " + project.Name
+	}
+	commands := []tui.Command{
+		{Cmd: "docker build -t " + project.Name + " .", Note: "build the image"},
+		{Cmd: run, Note: "run it, then curl http://127.0.0.1:8787/up"},
+	}
+	return out.done("howdy add docker", "docker", commands, notes, manual)
 }
 
 func addFlagsCommand() *cobra.Command {

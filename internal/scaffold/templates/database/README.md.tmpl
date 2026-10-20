@@ -95,9 +95,9 @@ refresh after every command.
 ### Without hot reload
 {{- end}}
 
-`gleam run` starts the server without the reload watcher. It also migrates
-at startup; for production you may prefer to run `gleam run -m tasks/migrate`
-separately and remove that line from `main`.
+`gleam run` starts the server without the reload watcher. It also
+applies pending migrations at startup unless `MIGRATE_ON_START=false`; then
+apply them with `gleam run -m tasks/migrate`.
 
 ## Configuration
 
@@ -106,8 +106,10 @@ directory loaded first. Copy `.env.example` to `.env` to change it.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `PORT` | `8787` | Listening port on 127.0.0.1 |
+| `PORT` | `8787` | Listening port |
+| `HOST` | `127.0.0.1` | Address to listen on; `0.0.0.0` in a container |
 | `DATABASE_PATH` | `{{.Name}}.sqlite3` | SQLite file; parent directory must exist |
+| `MIGRATE_ON_START` | `true` | Apply pending migrations as the app starts |
 | `DOT_ENV_PATH` | `.env` | Which file to load, set in the shell |
 {{- if .Full}}
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | unset | `gleam run` sends traces to this OpenTelemetry collector, such as `http://localhost:4318` |
@@ -170,6 +172,10 @@ dev/
 └── {{.Name}}_dev.gleam        # `gleam dev` entry point with hot reload{{if .Full}}, admin and telemetry{{end}}
 priv/public/assets/            # style.css (yours) and ui.css (generated)
 test/
+{{- if .Docker}}
+bin/start                      # starts the app in the image: run{{if .Database}}, migrate{{end}} or remote
+Dockerfile                     # builds the image to deploy
+{{- end}}
 ```
 
 Features live in a folder each under `src/{{.Name}}/features/`, with their
@@ -249,6 +255,70 @@ changing themes or adding copied components:
 ```sh
 gleam run -m tasks/css
 ```
+
+## Deploy
+{{- if .Docker}}
+
+The `Dockerfile` builds an image that runs the app:
+
+```sh
+docker build -t {{.Name}} .
+{{- if eq .Database "sqlite"}}
+docker run --rm -p 8787:8787 -v {{.Name}}_data:/data {{.Name}}
+{{- else if eq .Database "postgres"}}
+docker run --rm -p 8787:8787 -e DATABASE_URL=postgres://user:password@host:5432/{{.Name}} {{.Name}}
+{{- else}}
+docker run --rm -p 8787:8787 {{.Name}}
+{{- end}}
+```
+{{- if eq .Database "postgres"}}
+
+`docker compose --profile app up --build` runs it beside the local
+PostgreSQL, to try it before deploying.
+{{- end}}
+
+The image compiles the app with `gleam export erlang-shipment`, which
+leaves out `dev/` and the dev dependencies, and runs it as an unprivileged
+user on `0.0.0.0:8787`.
+{{- if eq .Database "sqlite"}} The SQLite database is kept in the `/data`
+volume, so it outlives the container. Only one container at a time can use
+it, so run a single replica.
+{{- end}} It uses the Gleam and Erlang versions the project was made
+with; change them at the top of the `Dockerfile` when you upgrade.
+`bin/start` starts the app in the image:
+
+| Command | What it does |
+| --- | --- |
+| `bin/start run` | Serve the app; what the image runs |
+{{- if .Database}}
+| `bin/start migrate` | Apply pending migrations, then exit |
+{{- end}}
+| `bin/start remote` | Open an Erlang shell inside the running app |
+
+Set `HOWDY_NODE_NAME` and `HOWDY_COOKIE` to start the app as a named
+Erlang node, for `bin/start remote` or to join other nodes in a cluster.
+`bin/start` explains them.
+{{- end}}
+
+Whatever runs the app, it is ready for production:
+
+- **Health checks.** `GET /up` answers `{"status":"ok"}` while the app
+  runs{{if .Docker}}, and the image's `HEALTHCHECK` asks it{{end}}. It is answered
+  ahead of the routes and middleware and is not logged, so point a load
+  balancer or platform at it.
+- **Clean stops.** On SIGTERM the server stops taking connections and
+  gives requests in flight 8 seconds to finish, inside the 10 seconds
+  `docker stop` waits. Change it with `howdy.shutdown_timeout` in
+  `configured`.
+{{- if .Database}}
+- **Migrations.** The app applies pending migrations as it starts, and a
+  release that fails to migrate never starts serving. Copies of the app
+  that start together take turns. To migrate as a step of its own before
+  the new version starts, run {{if .Docker}}`bin/start migrate`{{else}}`gleam run -m tasks/migrate`{{end}} and set
+  `MIGRATE_ON_START=false`.
+{{- end}}
+- **Configuration** comes from the environment. Set it on the platform
+  rather than shipping `.env`{{if .Docker}}, which `.dockerignore` leaves out of the image{{end}}.
 
 ## Upgrading Howdy
 
