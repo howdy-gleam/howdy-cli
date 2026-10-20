@@ -3,6 +3,7 @@ package generate
 import (
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -19,7 +20,12 @@ func TestNoteForAgents(t *testing.T) {
 
 	path := filepath.Join(dir, AgentsFile)
 	os.WriteFile(path, []byte("# Working on Demo site\n\nThe guide.\n"), 0o644)
-	for _, pkg := range []string{"mail", "auth", "flags", "openapi", "remote"} {
+	packages := make([]string, 0, len(agentNotes))
+	for pkg := range agentNotes {
+		packages = append(packages, pkg)
+	}
+	sort.Strings(packages)
+	for _, pkg := range packages {
 		changed, err := p.NoteForAgents(pkg)
 		if err != nil || len(changed) == 0 || changed[0] != AgentsFile {
 			t.Fatalf("%s: changed %v, %v", pkg, changed, err)
@@ -34,18 +40,20 @@ func TestNoteForAgents(t *testing.T) {
 	src, _ := os.ReadFile(path)
 	text := string(src)
 	for _, want := range []string{
-		"The guide.\n\n<!-- howdy add mail -->\n## Email\n",
+		"The guide.\n\n<!-- howdy add " + packages[0] + " -->\n## ",
+		"<!-- howdy add mail -->\n## Email\n",
 		"`src/demo_site/emails/`",
 		"`src/demo_site/platform/accounts.gleam`",
 		"`src/demo_site/feature_flags.gleam`",
 		"`src/demo_site/platform/api_docs.gleam`",
 		"`src/demo_site/platform/rpc.gleam`",
+		"<!-- howdy add docker -->\n## Deploying\n",
 	} {
 		if !strings.Contains(text, want) {
 			t.Errorf("AGENTS.md should contain %q:\n%s", want, text)
 		}
 	}
-	if strings.Contains(text, "%!") || strings.Count(text, "## Email") != 1 {
+	if strings.Contains(text, "%") || strings.Count(text, "## Email") != 1 {
 		t.Errorf("AGENTS.md is badly written:\n%s", text)
 	}
 	skill, err := os.ReadFile(filepath.Join(dir, ".claude/skills/howdy-auth/SKILL.md"))
